@@ -44,7 +44,7 @@ const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: tru
 const shadowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMat);
 scene.add(shadowMesh);
 
-const PET_SCALE = 68;
+const PET_SCALE = 50;
 
 let petHandle = null;
 let petGroup = null;
@@ -52,7 +52,7 @@ let facing = 1;
 
 function petAnchor() {
   // bottom-center of the canvas, with a little headroom above the "ground"
-  return { x: width / 2, y: height - Math.min(28, height * 0.12) };
+  return { x: width / 2, y: height - Math.min(20, height * 0.12) };
 }
 
 function loadPet(id) {

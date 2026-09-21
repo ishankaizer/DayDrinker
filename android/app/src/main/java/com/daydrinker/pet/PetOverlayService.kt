@@ -12,14 +12,20 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.core.app.NotificationCompat
+import androidx.webkit.WebViewAssetLoader
 import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.random.Random
@@ -113,7 +119,7 @@ class PetOverlayService : Service() {
         val metrics = resources.displayMetrics
         screenWidthPx = metrics.widthPixels
         screenHeightPx = metrics.heightPixels
-        overlaySizePx = (200 * metrics.density).toInt()
+        overlaySizePx = (150 * metrics.density).toInt()
         val groundMarginPx = (36 * metrics.density).toInt()
         groundYPx = screenHeightPx - overlaySizePx - groundMarginPx
 
@@ -135,12 +141,34 @@ class PetOverlayService : Service() {
         layoutParams.x = x.toInt()
         layoutParams.y = groundYPx
 
+        // Serving assets via file:// leaves ES module imports (three.js's
+        // `import` inside overlay-main.js) unreliable in WebView — some
+        // OEM WebView builds silently refuse the cross-file fetch, which
+        // renders nothing but still leaves the overlay window sitting there
+        // eating touches. WebViewAssetLoader maps assets/ to a proper
+        // https://appassets.androidplatform.net origin instead, which
+        // behaves like a normal web page and avoids that entirely.
+        val assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+
         val webViewLocal = WebView(this).apply {
             setBackgroundColor(0x00000000)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            webViewClient = WebViewClient()
-            loadUrl("file:///android_asset/pet/overlay.html")
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                    Log.d(LOG_TAG, "pet webview: ${message.message()} (${message.sourceId()}:${message.lineNumber()})")
+                    return true
+                }
+            }
+            loadUrl("https://appassets.androidplatform.net/assets/pet/overlay.html")
         }
 
         val containerLocal = FrameLayout(this).apply {
@@ -357,6 +385,7 @@ class PetOverlayService : Service() {
     companion object {
         const val DEFAULT_PET = "loris"
 
+        private const val LOG_TAG = "DayDrinkerPet"
         private const val CHANNEL_ID = "daydrinker_pet"
         private const val NOTIFICATION_ID = 1001
         private const val WALK_SPEED_PX_PER_SEC = 90f
