@@ -70,6 +70,7 @@ export function createLoris() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       const bob = s.walking ? Math.abs(Math.sin(t * 5)) * 0.04 : Math.sin(t * 1.6) * 0.015;
       body.position.y = 0.34 + bob - s.sitAmount * 0.2;

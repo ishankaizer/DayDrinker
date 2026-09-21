@@ -60,6 +60,7 @@ export function createHotdogMonkey() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 6)) * 0.03 : Math.sin(t * 1.6) * 0.012) - s.sitAmount * 0.14;
       armL.rotation.x = s.walking ? Math.sin(t * 6 + Math.PI) * 0.4 : Math.sin(t * 1.5) * 0.05;

@@ -43,6 +43,7 @@ export function createMonkey() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 7)) * 0.04 : Math.sin(t * 1.7) * 0.015) - s.sitAmount * 0.18;
       armL.rotation.x = s.walking ? Math.sin(t * 7 + Math.PI) * 0.5 : Math.sin(t * 1.5) * 0.06;

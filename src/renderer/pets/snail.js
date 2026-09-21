@@ -61,6 +61,7 @@ export function createSnail() {
 
   return {
     group: root,
+    wag: stalks[0],
     update(t, s) {
       const rollSpeed = s.walking ? 6 : 0;
       wheels.forEach((w) => (w.rotation.x += 0.15 * (s.walking ? 1 : 0)));

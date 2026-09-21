@@ -37,6 +37,7 @@ export function createDuck() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 8)) * 0.03 : Math.sin(t * 2) * 0.012) - s.sitAmount * 0.1;
       body.rotation.z = s.walking ? Math.sin(t * 8) * 0.06 : 0;

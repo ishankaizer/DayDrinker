@@ -46,6 +46,7 @@ export function createHermitCrab() {
 
   return {
     group: root,
+    wag: clawL,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 11)) * 0.02 : Math.sin(t * 2.2) * 0.01) - s.sitAmount * 0.05;
       clawL.rotation.z = Math.sin(t * 1.4) * 0.08;

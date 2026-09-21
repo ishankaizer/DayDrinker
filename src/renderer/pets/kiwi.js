@@ -31,6 +31,7 @@ export function createKiwi() {
 
   return {
     group: root,
+    wag: beak,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 7)) * 0.035 : Math.sin(t * 2) * 0.015) - s.sitAmount * 0.16;
       body.rotation.z = s.walking ? Math.sin(t * 7) * 0.05 : 0;

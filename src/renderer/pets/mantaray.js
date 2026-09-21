@@ -35,6 +35,7 @@ export function createMantaRay() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       const flap = s.walking ? Math.sin(t * 4) * 0.22 : Math.sin(t * 1.3) * 0.06;
       wings.rotation.z = flap;

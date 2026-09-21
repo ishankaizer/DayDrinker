@@ -51,6 +51,7 @@ export function createWestie() {
 
   return {
     group: root,
+    wag: tail,
     idleHeadBase: head.position.y,
     update(t, s) {
       body.position.y = 0.42 + (s.walking ? Math.abs(Math.sin(t * 6)) * 0.03 : Math.sin(t * 1.4) * 0.01);

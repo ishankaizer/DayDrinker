@@ -28,6 +28,7 @@ export function createTurtle() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 3)) * 0.015 : Math.sin(t * 1.2) * 0.008) - s.sitAmount * 0.06;
       head.position.z = s.sitAmount > 0.5 ? 0.4 - s.sitAmount * 0.15 : 0.4;

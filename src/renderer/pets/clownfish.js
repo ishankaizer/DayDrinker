@@ -39,6 +39,7 @@ export function createClownfish() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       const swim = s.walking ? Math.sin(t * 9) * 0.2 : Math.sin(t * 2) * 0.04;
       body.rotation.y = swim;

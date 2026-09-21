@@ -54,6 +54,7 @@ export function createRooster() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 8)) * 0.035 : Math.sin(t * 1.9) * 0.012) - s.sitAmount * 0.16;
       tail.rotation.y = Math.sin(t * 1.3) * 0.06;

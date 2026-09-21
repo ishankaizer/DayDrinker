@@ -37,6 +37,7 @@ export function createShrimp() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       const curl = s.walking ? Math.sin(t * 9) * 0.25 : Math.sin(t * 2) * 0.06;
       segments.forEach((seg, i) => {

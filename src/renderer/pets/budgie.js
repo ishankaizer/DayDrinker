@@ -39,6 +39,7 @@ export function createBudgie() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 12)) * 0.02 : Math.sin(t * 2.6) * 0.012) - s.sitAmount * 0.1;
       head.rotation.y = Math.sin(t * 3) * 0.1;

@@ -33,6 +33,7 @@ export function createSheep() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 6)) * 0.03 : Math.sin(t * 1.5) * 0.012) - s.sitAmount * 0.2;
       head.rotation.x = Math.sin(t * 1.1) * 0.05;

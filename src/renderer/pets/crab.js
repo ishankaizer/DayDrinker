@@ -48,6 +48,7 @@ export function createCrab() {
 
   return {
     group: root,
+    wag: clawL,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 12)) * 0.02 : Math.sin(t * 2.4) * 0.01) - s.sitAmount * 0.06;
       clawL.rotation.z = Math.sin(t * 1.5) * 0.1;

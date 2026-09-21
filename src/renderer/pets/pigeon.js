@@ -38,6 +38,7 @@ export function createPigeon() {
 
   return {
     group: root,
+    wag: beak,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 10)) * 0.02 : Math.sin(t * 2.2) * 0.01) - s.sitAmount * 0.16;
       body.position.x = s.walking ? Math.sin(t * 10) * 0.015 : 0;

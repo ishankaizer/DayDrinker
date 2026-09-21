@@ -33,6 +33,7 @@ export function createBat() {
 
   return {
     group: root,
+    wag: earL,
     update(t, s) {
       if (s.walking) {
         body.position.y = 0.18 + Math.sin(t * 10) * 0.08;

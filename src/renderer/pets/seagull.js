@@ -34,6 +34,7 @@ export function createSeagull() {
 
   return {
     group: root,
+    wag: beak,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 9)) * 0.025 : Math.sin(t * 2) * 0.012) - s.sitAmount * 0.18;
       if (s.walking) {

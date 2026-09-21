@@ -36,6 +36,7 @@ export function createFrog() {
 
   return {
     group: root,
+    wag: body,
     update(t, s) {
       if (s.walking) {
         // squash-and-stretch hop cycle instead of a walk cycle

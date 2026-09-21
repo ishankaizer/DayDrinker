@@ -15,14 +15,25 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
   to whatever's underneath.
 - The pet wanders left/right along the bottom of the screen with a walk
   cycle, pauses, sometimes flops into a sit on its own, then wanders again.
-- Click the pet to toggle between "sit and stay right here" and "go wander."
+- Hover over the pet and its tail (or ears, or claw, or beak — whatever that
+  species has) shakes with excitement.
+- **Pet it.** Click and stroke across it with the mouse held down and it
+  stands still, squishes happily, wags like mad and puffs out little hearts.
+- A plain click (no stroke) still toggles between "sit and stay right here"
+  and "go wander."
 - A tray icon lets you swap between pets and force a sit/wander.
+- It animates on a deliberately chunky ~10fps clock, moves on a 2px grid and
+  drops the occasional frame, and every pet gets a random permanent tilt and
+  uneven squash when it loads. It's supposed to look like a cheap virtual pet
+  from 2001, not a smooth 120Hz demo — a lopsided little bugger.
 - Every pet has a home — a themed little patch near the left edge of the
   screen (grass and a kennel for land animals, a perch and birdbath for
   birds, a fishbowl for sea life) that it wanders back to on its own now and
-  then. A musical toy sits next to it; click it and DayDrinker opens Spotify
-  for you (the Spotify desktop app if it's installed, otherwise the web
-  player). This is the first of hopefully a few small Rover-the-dog-style
+  then. A musical toy sits next to it; click the toy and the pet trots over
+  to it, lifts its head and sings — music notes puffing out of it — and
+  *then* Spotify opens (the desktop app if it's installed, otherwise the web
+  player). The trick is never "click, link opens"; the buddy does the thing
+  first. This is the first of hopefully a few small Rover-the-dog-style
   "actually do something useful" tricks — more to come.
 - Every critter is built from cheap, faceted, low-poly primitives with flat
   shading — no smooth normals, no fancy textures — on purpose. Cutesy but

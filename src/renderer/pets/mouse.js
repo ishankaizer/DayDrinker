@@ -58,6 +58,7 @@ export function createMouse() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 7)) * 0.03 : Math.sin(t * 1.8) * 0.012) - s.sitAmount * 0.14;
       tail.rotation.z = Math.sin(t * 1.4) * 0.25;

@@ -44,6 +44,7 @@ export function createDeer() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 7)) * 0.03 : Math.sin(t * 1.8) * 0.012) - s.sitAmount * 0.22;
       earL.rotation.x = Math.sin(t * 2) * 0.1;

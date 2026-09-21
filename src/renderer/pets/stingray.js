@@ -30,6 +30,7 @@ export function createStingray() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       const flap = s.walking ? Math.sin(t * 6) * 0.18 : Math.sin(t * 1.6) * 0.05;
       disc.rotation.z = Math.PI / 4 + flap;

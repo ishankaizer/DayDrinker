@@ -44,6 +44,7 @@ export function createRat() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 10)) * 0.025 : Math.sin(t * 2.2) * 0.012) - s.sitAmount * 0.1;
       tail.rotation.z = Math.sin(t * 1.4) * 0.2;

@@ -43,6 +43,7 @@ export function createChicken() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 9)) * 0.035 : Math.sin(t * 2) * 0.012) - s.sitAmount * 0.14;
       head.position.x = s.walking ? Math.sin(t * 9) * 0.02 : 0;

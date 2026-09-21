@@ -71,17 +71,21 @@ function buildSeaHome() {
   sandBase.position.y = 0.05;
   group.add(sandBase);
 
-  // the fishbowl: a translucent glass dome over a puddle of water
+  // The fishbowl: a translucent glass dome over a puddle of water. Kept as
+  // plain alpha blending on purpose — a physical/transmission material costs
+  // an extra full-scene render pass every frame, which is absurd for a
+  // widget that sits on your desktop all day (and too shiny for the look).
   const bowl = new THREE.Mesh(
-    new THREE.SphereGeometry(0.5, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    new THREE.MeshPhysicalMaterial({
+    new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    new THREE.MeshStandardMaterial({
       color: 0xdfeef2,
       transparent: true,
-      opacity: 0.28,
-      roughness: 0.15,
+      opacity: 0.25,
+      roughness: 0.4,
       metalness: 0,
-      transmission: 0.4,
+      flatShading: true,
       side: THREE.DoubleSide,
+      depthWrite: false,
     })
   );
   bowl.position.y = 0.12;

@@ -32,6 +32,7 @@ export function createOctopus() {
 
   return {
     group: root,
+    wag: head,
     update(t, s) {
       const wobble = s.walking ? 1 : 0.3;
       tentacles.forEach((pivot, i) => {

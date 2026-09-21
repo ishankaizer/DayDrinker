@@ -46,6 +46,7 @@ export function createSquirrel() {
 
   return {
     group: root,
+    wag: tail,
     update(t, s) {
       body.position.y = (s.walking ? Math.abs(Math.sin(t * 9)) * 0.03 : Math.sin(t * 2) * 0.015) - s.sitAmount * 0.14;
       tail.rotation.x = -0.2 + Math.sin(t * 1.5) * 0.08 - s.sitAmount * 0.3;
