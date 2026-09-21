@@ -4,7 +4,7 @@ import * as THREE from '../../node_modules/three/build/three.module.min.js';
 // notes when it sings at its toy. Same chunky faceted look as everything
 // else — these are made of 6-sided spheres and 3-sided cones on purpose.
 
-const POOL_SIZE = 20;
+const POOL_SIZE = 10; // per kind
 const LIFETIME = 1.6; // seconds
 
 function makeHeart() {
@@ -39,20 +39,43 @@ function makeNote() {
   return group;
 }
 
+function makeZ() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x6f7f9a, transparent: true });
+  const bar = () => new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.16, 0.12), mat);
+  const top = bar();
+  top.position.y = 0.36;
+  const bottom = bar();
+  bottom.position.y = -0.36;
+  const diag = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.16, 0.12), mat);
+  diag.rotation.z = -0.9;
+  group.add(top, bottom, diag);
+  group.userData.material = mat;
+  return group;
+}
+
+function makeCrumb() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xb8823f, transparent: true });
+  const bit = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), mat);
+  group.add(bit);
+  group.userData.material = mat;
+  return group;
+}
+
+const FACTORIES = { heart: makeHeart, note: makeNote, zzz: makeZ, crumb: makeCrumb };
+
 export class Particles {
   constructor(scene) {
     this.scene = scene;
     this.items = [];
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const heart = makeHeart();
-      const note = makeNote();
-      heart.visible = false;
-      note.visible = false;
-      scene.add(heart, note);
-      this.items.push(
-        { mesh: heart, kind: 'heart', life: 0, vx: 0, vy: 0, spin: 0 },
-        { mesh: note, kind: 'note', life: 0, vx: 0, vy: 0, spin: 0 }
-      );
+    for (const [kind, factory] of Object.entries(FACTORIES)) {
+      for (let i = 0; i < POOL_SIZE; i++) {
+        const mesh = factory();
+        mesh.visible = false;
+        scene.add(mesh);
+        this.items.push({ mesh, kind, life: 0, vx: 0, vy: 0, spin: 0 });
+      }
     }
   }
 
@@ -64,7 +87,8 @@ export class Particles {
     slot.mesh.position.set(x + (Math.random() * 2 - 1) * size * 0.3, y, 1);
     slot.mesh.scale.setScalar(size * (0.8 + Math.random() * 0.4));
     slot.vx = (Math.random() * 2 - 1) * size * 0.5;
-    slot.vy = size * (1.1 + Math.random() * 0.5);
+    // crumbs drop out of its mouth; everything else floats up
+    slot.vy = kind === 'crumb' ? -size * 0.8 : size * (1.1 + Math.random() * 0.5);
     slot.spin = (Math.random() * 2 - 1) * 2.5;
     slot.mesh.userData.material.opacity = 1;
   }

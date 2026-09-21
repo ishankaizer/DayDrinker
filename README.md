@@ -26,18 +26,58 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
   drops the occasional frame, and every pet gets a random permanent tilt and
   uneven squash when it loads. It's supposed to look like a cheap virtual pet
   from 2001, not a smooth 120Hz demo — a lopsided little bugger.
-- Every pet has a home — a themed little patch near the left edge of the
-  screen (grass and a kennel for land animals, a perch and birdbath for
-  birds, a fishbowl for sea life) that it wanders back to on its own now and
-  then. A musical toy sits next to it; click the toy and the pet trots over
-  to it, lifts its head and sings — music notes puffing out of it — and
-  *then* Spotify opens (the desktop app if it's installed, otherwise the web
-  player). The trick is never "click, link opens"; the buddy does the thing
-  first. This is the first of hopefully a few small Rover-the-dog-style
-  "actually do something useful" tricks — more to come.
+- **Pick it up.** Drag it further than a stroke and you've scooped it up; it
+  dangles from the cursor and plops back down where you drop it.
+- **It notices you.** Leave the cursor near it for a moment and it'll wander
+  over to see what you're doing (then lose interest, so it isn't clingy).
+- **It sleeps.** After a few minutes of system idle it dozes off with little
+  Z's floating up, and stretches awake when you come back. It's also slower
+  late at night and first thing in the morning.
+- **It makes noises** — chirps, munching, snoring, a little fanfare — all
+  synthesized as square waves on the fly, so there are no audio files and it
+  can't sound too nice. Mutable from the tray.
 - Every critter is built from cheap, faceted, low-poly primitives with flat
   shading — no smooth normals, no fancy textures — on purpose. Cutesy but
   dumb-looking, like a PS2 mascot.
+
+## Its home and its toys
+
+Every pet has a home near the left edge of the screen, themed to what it is —
+grass and a kennel for land animals, a perch and birdbath for birds, a
+fishbowl for sea life — and it wanders back there on its own now and then.
+
+A shelf of toys sits next to it. Clicking a toy is never "click, link opens":
+the pet trots over and *does something* first, and the useful bit happens
+afterwards.
+
+| Toy | What the pet does | What you get |
+| --- | --- | --- |
+| Music note | Runs over, lifts its head and sings, notes puffing out of it | Spotify opens (desktop app, else web player) |
+| Ball | Bounces around after it | Opens your browser link |
+| Food bowl | Eats, dropping crumbs | Hunger topped up (see below) |
+| Clock | Settles in to work with you | Starts a 25-minute focus session |
+
+## Being an actual work buddy
+
+- **Focus sessions.** Start one from the clock toy or the tray. At the bell
+  it plays a fanfare and tells you your count for the day and your streak.
+- **Streaks.** Sessions per day and consecutive days are kept on disk, so the
+  buddy you kept going yesterday is the one that shows up today.
+- **It pesters you** (goose mode, toggleable in the tray). Every so often it
+  marches over to your cursor, stands on it, and slaps a sticky note on your
+  screen telling you to drink water or stand up. Click the note or the pet to
+  dismiss it. It always gives up on its own after ~25s too — it can annoy
+  you, but it can never trap you.
+- **"Remind me in…"** from the tray — 5/10/20/30 minutes, delivered the same
+  way.
+
+## Looking after it
+
+It's a little bit tamagotchi: hunger and happiness drift down through the
+day, feeding it at the bowl tops hunger up, scratching it and finishing focus
+sessions make it happier. A hungry or sad pet gets visibly droopier and
+dawdles more; one you keep fed and busy grows slightly bigger over time. All
+of it is saved between runs.
 
 ## Pets
 
@@ -96,11 +136,20 @@ a sit, or quit.
   than a hard cut. It also biases wander targets toward `homeX` sometimes,
   so the pet actually visits its kennel instead of just roaming forever.
 - `src/renderer/environments.js` builds the three home types (land/birds/sea,
-  picked via `src/renderer/pets/categories.js`) and the musical toy. The
-  toy's click is wired through the same hit-region trick as the pet itself
-  (`main.js` tracks a second `overToy` hover box) and fires
-  `window.petBridge.openSpotify()` → an IPC message → `shell.openExternal`
-  in the main process.
+  picked via `src/renderer/pets/categories.js`) and the toy shelf. Toys are
+  data: a `TOYS` array of `{ build, perform, action }`, so a new trick is one
+  builder plus one entry. Their clicks ride the same hit-region trick as the
+  pet itself — `main.js` keeps a hover box per toy and tells the main process
+  to stop ignoring the mouse only over those boxes.
+- `src/renderer/petState.js` is the care loop (hunger, happiness, streak,
+  growth) as plain data with no rendering in it; `electron/main.js` persists
+  it to `daydrinker-state.json` in Electron's userData directory.
+- `src/renderer/sounds.js` synthesizes every noise with oscillators, and
+  `src/renderer/particles.js` pools the hearts / notes / Z's / crumbs.
+  `src/renderer/stickyNote.js` is the goose-mode note: a canvas texture on a
+  quad, deliberately crooked.
+- Idle detection comes from `powerMonitor.getSystemIdleTime()` in the main
+  process, polled every 4s and pushed to the renderer.
 
 ## Adding a new pet
 

@@ -115,9 +115,12 @@ export function buildHome(category) {
   return builder();
 }
 
-// A little musical toy — note head, stem, flag — parked beside the home.
-// Click it to ask the pet's owner (that's you) if they want some music.
-export function buildMusicToy() {
+// -- the toy shelf --------------------------------------------------------
+// Each toy is a prop on the ground beside the home that you can click. What
+// a click does is defined in TOYS below, so adding a new trick is one entry
+// plus one builder.
+
+function buildMusicToy() {
   const group = new THREE.Group();
 
   const head = blob(0.09, 0.07, 0.06, 0xe8b73a, 0);
@@ -136,9 +139,68 @@ export function buildMusicToy() {
   return group;
 }
 
+function buildBallToy() {
+  const group = new THREE.Group();
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), facetMaterial(0xd94f4f));
+  ball.position.y = 0.16;
+  group.add(ball);
+  const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 4, 8), facetMaterial(0xf2ede0));
+  stripe.position.y = 0.16;
+  stripe.rotation.x = Math.PI / 2;
+  group.add(stripe);
+  return group;
+}
+
+function buildBowlToy() {
+  const group = new THREE.Group();
+  const bowl = stub(0.2, 0.13, 0.13, 0x5f87a8, 8);
+  bowl.position.y = 0.07;
+  group.add(bowl);
+  const food = stub(0.15, 0.15, 0.05, 0x8a5a2f, 8);
+  food.position.y = 0.14;
+  group.add(food);
+  for (let i = 0; i < 3; i++) {
+    const kibble = new THREE.Mesh(new THREE.IcosahedronGeometry(0.035, 0), facetMaterial(0x6f4423));
+    kibble.position.set((i - 1) * 0.07, 0.18, (i % 2) * 0.04);
+    group.add(kibble);
+  }
+  return group;
+}
+
+function buildClockToy() {
+  const group = new THREE.Group();
+  const body = stub(0.17, 0.17, 0.06, 0xe4dccb, 10);
+  body.rotation.x = Math.PI / 2;
+  body.position.y = 0.2;
+  group.add(body);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 4, 10), facetMaterial(0x9a4f3a));
+  rim.position.y = 0.2;
+  group.add(rim);
+  const hand = block(0.02, 0.12, 0.02, 0x2a2118);
+  hand.position.set(0, 0.25, 0.04);
+  group.add(hand);
+  const hand2 = block(0.09, 0.02, 0.02, 0x2a2118);
+  hand2.position.set(0.04, 0.2, 0.04);
+  group.add(hand2);
+  const foot = block(0.2, 0.05, 0.08, 0x9a4f3a);
+  foot.position.y = 0.03;
+  group.add(foot);
+  return group;
+}
+
+// id, what the pet does when you click it, and what the app does afterwards.
+// `perform` is the pet's little routine; `action` is handled by main.js.
+export const TOYS = [
+  { id: 'music', build: buildMusicToy, perform: 'sing', action: 'spotify', label: 'music' },
+  { id: 'ball', build: buildBallToy, perform: 'play', action: 'browser', label: 'ball' },
+  { id: 'bowl', build: buildBowlToy, perform: 'eat', action: 'feed', label: 'food bowl' },
+  { id: 'clock', build: buildClockToy, perform: 'focus', action: 'focus', label: 'focus clock' },
+];
+
+// Animates a toy's *inner* group, whose parent anchor holds the world scale.
+// Everything here is in model units, so scale stays a 1-ish multiplier.
 export function idleToy(toy, t, hovered) {
-  const bob = Math.sin(t * 2) * 0.03;
-  toy.position.y = 0.1 + bob;
+  toy.position.y = 0.06 + Math.sin(t * 2) * 0.04;
   toy.rotation.y = t * 0.6;
   const targetScale = hovered ? 1.25 : 1;
   toy.scale.x += (targetScale - toy.scale.x) * 0.2;
