@@ -1,0 +1,20 @@
+{
+  "name": "daydrinker",
+  "productName": "DayDrinker",
+  "version": "0.1.0",
+  "description": "A dumb little low-poly PS2-era pet that lives on your desktop.",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "author": "ishankaizer",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  }
+}
