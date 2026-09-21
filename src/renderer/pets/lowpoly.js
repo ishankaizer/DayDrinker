@@ -95,3 +95,41 @@ export class LegRig {
     });
   }
 }
+
+// A pair of flat wing panels hinged at the shoulder, flapped on a sine wave
+// and folded flat against the body for a "sit"/resting pose.
+export class WingRig {
+  constructor({ width = 0.06, height = 0.3, depth = 0.16, color, shoulderX = 0.14, shoulderY = 0, shoulderZ = 0 }) {
+    this.left = new THREE.Group();
+    this.right = new THREE.Group();
+    this.left.position.set(-shoulderX, shoulderY, shoulderZ);
+    this.right.position.set(shoulderX, shoulderY, shoulderZ);
+    const wingL = block(width, height, depth, color);
+    wingL.position.x = -width / 2;
+    const wingR = block(width, height, depth, color);
+    wingR.position.x = width / 2;
+    this.left.add(wingL);
+    this.right.add(wingR);
+  }
+
+  addTo(group) {
+    group.add(this.left, this.right);
+  }
+
+  flap(t, speed = 10, amount = 0.9) {
+    const a = Math.abs(Math.sin(t * speed)) * amount;
+    this.left.rotation.z = a;
+    this.right.rotation.z = -a;
+  }
+
+  idle(t) {
+    const a = Math.sin(t * 1.4) * 0.06;
+    this.left.rotation.z = 0.08 + a;
+    this.right.rotation.z = -0.08 - a;
+  }
+
+  fold(progress) {
+    this.left.rotation.z = progress * 0.1;
+    this.right.rotation.z = -progress * 0.1;
+  }
+}

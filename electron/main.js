@@ -3,8 +3,56 @@ const path = require('path');
 
 let win = null;
 let tray = null;
-const PET_TYPES = ['loris', 'westie', 'snail', 'mouse', 'kiwi'];
-let currentPet = PET_TYPES[0];
+
+const PET_CATEGORIES = [
+  {
+    label: 'Land',
+    pets: {
+      loris: 'Slow Loris',
+      westie: 'Westie Pup',
+      mouse: 'Snack Mouse',
+      rat: 'Gray Rat',
+      squirrel: 'Squirrel',
+      deer: 'Little Deer',
+      sheep: 'Sheep',
+      monkey: 'Monkey',
+      hotdogmonkey: 'Hot Dog Monkey',
+      frog: 'Frog',
+      bat: 'Bat',
+    },
+  },
+  {
+    label: 'Birds',
+    pets: {
+      kiwi: 'Kiwi Bird',
+      chicken: 'Chicken',
+      rooster: 'Rooster',
+      duck: 'Duck',
+      duckling: 'Duckling',
+      pigeon: 'Pigeon',
+      seagull: 'Seagull',
+      budgie: 'Budgie',
+    },
+  },
+  {
+    label: 'Sea Life',
+    pets: {
+      snail: 'Skate Snail',
+      shark: 'Shark',
+      turtle: 'Turtle',
+      octopus: 'Octopus',
+      clownfish: 'Clownfish',
+      angelfish: 'Angelfish',
+      stingray: 'Stingray',
+      mantaray: 'Manta Ray',
+      crab: 'Crab',
+      hermitcrab: 'Hermit Crab',
+      shrimp: 'Shrimp',
+    },
+  },
+];
+
+let currentPet = 'loris';
 
 function createWindow() {
   const display = screen.getPrimaryDisplay();
@@ -64,19 +112,9 @@ function buildTray() {
 }
 
 function rebuildMenu() {
-  const petLabels = {
-    loris: 'Slow Loris',
-    westie: 'Westie Pup',
-    snail: 'Skate Snail',
-    mouse: 'Snack Mouse',
-    kiwi: 'Kiwi Bird',
-  };
-
-  const template = [
-    { label: 'DayDrinker', enabled: false },
-    { type: 'separator' },
-    ...PET_TYPES.map((id) => ({
-      label: petLabels[id] || id,
+  const petSubmenu = (pets) =>
+    Object.entries(pets).map(([id, label]) => ({
+      label,
       type: 'radio',
       checked: currentPet === id,
       click: () => {
@@ -84,6 +122,14 @@ function rebuildMenu() {
         win?.webContents.send('set-pet', id);
         rebuildMenu();
       },
+    }));
+
+  const template = [
+    { label: 'DayDrinker', enabled: false },
+    { type: 'separator' },
+    ...PET_CATEGORIES.map((cat) => ({
+      label: cat.label,
+      submenu: petSubmenu(cat.pets),
     })),
     { type: 'separator' },
     {

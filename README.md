@@ -23,11 +23,22 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
 
 ## Pets
 
-- **Slow Loris** — round-eyed, clings upright, tail curled.
-- **Westie Pup** — a scruffy little terrier.
-- **Skate Snail** — a snail parked on a skateboard.
-- **Snack Mouse** — a mouse carrying its little chip bag.
-- **Kiwi Bird** — a round, flightless little dork with a big beak.
+30 of them, grouped the way the tray menu groups them.
+
+**Land** — Slow Loris, Westie Pup, Snack Mouse, Gray Rat, Squirrel, Little
+Deer, Sheep, Monkey, Hot Dog Monkey (a monkey in a hot dog costume — sausage,
+bun, mustard squiggle and all), Frog, Bat.
+
+**Birds** — Kiwi Bird, Chicken, Rooster, Duck, Duckling, Pigeon, Seagull,
+Budgie.
+
+**Sea Life** — Skate Snail (parked on a skateboard), Shark, Turtle, Octopus,
+Clownfish, Angelfish, Stingray, Manta Ray, Crab, Hermit Crab, Shrimp.
+
+Every one of them is built from the same handful of cheap faceted primitives
+in `lowpoly.js` — no two share a model, but they all share the same walk /
+idle / sit vocabulary, plus flippers-instead-of-legs for the swimmers and
+wings-instead-of-arms for the birds and the bat.
 
 ## Running it
 
@@ -51,8 +62,8 @@ icon to change pets, force a sit, or quit.
   camera mapped 1:1 to screen pixels, so pets are simply positioned at
   screen coordinates.
 - `src/renderer/pets/lowpoly.js` has the shared faceted-geometry helpers
-  (blobs, blocks, stubs, spikes, a generic leg rig with a walk/sit pose)
-  that every critter is built out of.
+  (blobs, blocks, stubs, spikes, a generic leg rig with a walk/sit pose, and
+  a wing rig with a flap/fold pose) that every critter is built out of.
 - `src/renderer/pets/*.js` — one file per species, each just a pile of
   primitives + a per-frame `update(t, state)` for its walk/idle/sit poses.
 - `src/renderer/petController.js` is the tiny state machine deciding where
@@ -67,7 +78,8 @@ icon to change pets, force a sit, or quit.
    `lowpoly.js`, and use `state.walking` / `state.sitAmount` in `update` to
    drive the pose (see any existing pet file for the pattern).
 2. Register it in `src/renderer/pets/index.js`'s `PET_FACTORIES`.
-3. Add it to the tray menu's `petLabels` in `electron/main.js`.
+3. Add it to a category's `pets` map in `PET_CATEGORIES` in `electron/main.js`
+   (that's what builds the tray's Land / Birds / Sea Life submenus).
 
 ## Android
 
