@@ -21,6 +21,14 @@ export class PetController {
     this._pauseUntil = performance.now() + 500;
     this._pausedSitTarget = 0.15;
     this.targetX = this.x;
+
+    // where its kennel/fishbowl/perch sits — wander targets occasionally
+    // bias toward here so it actually visits home instead of just roaming
+    this.homeX = null;
+  }
+
+  setHome(x) {
+    this.homeX = x;
   }
 
   resize(width, height) {
@@ -49,7 +57,13 @@ export class PetController {
 
   _startWalking() {
     const margin = 60;
-    this.targetX = margin + Math.random() * Math.max(1, this.width - margin * 2);
+    if (this.homeX !== null && Math.random() < 0.3) {
+      const wobble = 50;
+      this.targetX = this.homeX + (Math.random() * 2 - 1) * wobble;
+    } else {
+      this.targetX = margin + Math.random() * Math.max(1, this.width - margin * 2);
+    }
+    this.targetX = Math.min(Math.max(this.targetX, margin), Math.max(margin, this.width - margin));
     this._mode = 'walking';
   }
 

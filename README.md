@@ -17,6 +17,13 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
   cycle, pauses, sometimes flops into a sit on its own, then wanders again.
 - Click the pet to toggle between "sit and stay right here" and "go wander."
 - A tray icon lets you swap between pets and force a sit/wander.
+- Every pet has a home — a themed little patch near the left edge of the
+  screen (grass and a kennel for land animals, a perch and birdbath for
+  birds, a fishbowl for sea life) that it wanders back to on its own now and
+  then. A musical toy sits next to it; click it and DayDrinker opens Spotify
+  for you (the Spotify desktop app if it's installed, otherwise the web
+  player). This is the first of hopefully a few small Rover-the-dog-style
+  "actually do something useful" tricks — more to come.
 - Every critter is built from cheap, faceted, low-poly primitives with flat
   shading — no smooth normals, no fancy textures — on purpose. Cutesy but
   dumb-looking, like a PS2 mascot.
@@ -47,8 +54,14 @@ npm install
 npm start
 ```
 
-That launches the Electron app. It has no window chrome — look for the tray
-icon to change pets, force a sit, or quit.
+Or just double-click **`run.bat`** (Windows) or run **`./run.sh`** (macOS/
+Linux) from the repo root — either installs dependencies on first run (needs
+[Node.js](https://nodejs.org) installed) and then launches it. No packaged
+`.exe` yet; these scripts are the "just run the thing" option in the
+meantime.
+
+The app has no window chrome — look for the tray icon to change pets, force
+a sit, or quit.
 
 ## How it's built
 
@@ -69,7 +82,14 @@ icon to change pets, force a sit, or quit.
 - `src/renderer/petController.js` is the tiny state machine deciding where
   the pet is walking to, when it pauses, and how much it's "sitting" — a
   0–1 blend the pet models use to ease between standing and sitting rather
-  than a hard cut.
+  than a hard cut. It also biases wander targets toward `homeX` sometimes,
+  so the pet actually visits its kennel instead of just roaming forever.
+- `src/renderer/environments.js` builds the three home types (land/birds/sea,
+  picked via `src/renderer/pets/categories.js`) and the musical toy. The
+  toy's click is wired through the same hit-region trick as the pet itself
+  (`main.js` tracks a second `overToy` hover box) and fires
+  `window.petBridge.openSpotify()` → an IPC message → `shell.openExternal`
+  in the main process.
 
 ## Adding a new pet
 

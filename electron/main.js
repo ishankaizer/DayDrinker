@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, screen, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, screen, ipcMain, nativeImage, shell } = require('electron');
 const path = require('path');
 
 let win = null;
@@ -155,6 +155,17 @@ function rebuildMenu() {
 ipcMain.on('set-hit-region', (_evt, isOverPet) => {
   if (!win) return;
   win.setIgnoreMouseEvents(!isOverPet, { forward: true });
+});
+
+// Clicking the musical toy by the pet's home: try the Spotify desktop app's
+// own URI scheme first (spotify:), and fall back to the web player if
+// nothing on the system claims it.
+ipcMain.on('open-spotify', async () => {
+  try {
+    await shell.openExternal('spotify:');
+  } catch {
+    shell.openExternal('https://open.spotify.com');
+  }
 });
 
 app.whenReady().then(() => {

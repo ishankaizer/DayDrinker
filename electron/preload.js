@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('petBridge', {
   onSetPet: (cb) => ipcRenderer.on('set-pet', (_e, id) => cb(id)),
   onCommand: (cb) => ipcRenderer.on('command', (_e, cmd) => cb(cmd)),
   setHitRegion: (isOverPet) => ipcRenderer.send('set-hit-region', isOverPet),
+  openSpotify: () => ipcRenderer.send('open-spotify'),
 });

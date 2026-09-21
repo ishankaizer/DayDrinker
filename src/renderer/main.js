@@ -1,6 +1,8 @@
 import * as THREE from '../../node_modules/three/build/three.module.min.js';
 import { PET_FACTORIES, DEFAULT_PET } from './pets/index.js';
+import { PET_CATEGORY } from './pets/categories.js';
 import { PetController } from './petController.js';
+import { buildHome, buildMusicToy, idleToy } from './environments.js';
 
 const canvas = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
@@ -46,10 +48,33 @@ const shadowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMat);
 scene.add(shadowMesh);
 
 const PET_SCALE = 90; // world/pixel units per model unit (model is ~1 unit tall)
+const HOME_SCALE = 130;
+const HOME_X = 150; // fixed spot near the left edge where the kennel/bowl/perch lives
 
 let currentPetId = DEFAULT_PET;
 let petHandle = null;
 let petGroup = null;
+
+let currentCategory = null;
+let homeGroup = null;
+let toyAnchor = null;
+let toyGroup = null;
+
+function loadHome(category) {
+  if (category === currentCategory) return;
+  currentCategory = category;
+  if (homeGroup) scene.remove(homeGroup);
+  if (toyAnchor) scene.remove(toyAnchor);
+  homeGroup = buildHome(category);
+  homeGroup.scale.setScalar(HOME_SCALE);
+  scene.add(homeGroup);
+
+  toyAnchor = new THREE.Group();
+  toyGroup = buildMusicToy();
+  toyGroup.scale.setScalar(HOME_SCALE * 0.55);
+  toyAnchor.add(toyGroup);
+  scene.add(toyAnchor);
+}
 
 function loadPet(id) {
   if (!PET_FACTORIES[id]) return;
@@ -59,11 +84,13 @@ function loadPet(id) {
   petGroup = petHandle.group;
   petGroup.scale.setScalar(PET_SCALE);
   scene.add(petGroup);
+  loadHome(PET_CATEGORY[id] || 'land');
 }
 
 loadPet(DEFAULT_PET);
 
 const controller = new PetController(width, height);
+controller.setHome(HOME_X);
 
 function resize(w, h) {
   width = w;
@@ -87,11 +114,14 @@ window.petBridge.onCommand((cmd) => {
   if (cmd === 'wander') controller.forceWander();
 });
 
-// -- hit testing: figure out whether the mouse is over the pet's on-screen
-// footprint, and tell the main process to let clicks through only there.
+// -- hit testing: figure out whether the mouse is over the pet, or over the
+// musical toy by its kennel, and tell the main process to let clicks
+// through only there.
+const TOY_OFFSET_X = HOME_SCALE * 1.1;
 let mouseX = -1;
 let mouseY = -1;
 let overPet = false;
+let overToy = false;
 
 window.addEventListener('mousemove', (e) => {
   mouseX = e.clientX;
@@ -99,7 +129,8 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('click', () => {
-  if (overPet) controller.toggleSit();
+  if (overToy) window.petBridge.openSpotify();
+  else if (overPet) controller.toggleSit();
 });
 
 function petScreenRect() {
@@ -111,6 +142,17 @@ function petScreenRect() {
     right: controller.x + halfW,
     top: controller.y - PET_SCALE * 1.3,
     bottom: controller.y + PET_SCALE * 0.25,
+  };
+}
+
+function toyScreenRect() {
+  const toyX = HOME_X + TOY_OFFSET_X;
+  const halfW = HOME_SCALE * 0.4;
+  return {
+    left: toyX - halfW,
+    right: toyX + halfW,
+    top: controller.y - HOME_SCALE * 0.7,
+    bottom: controller.y + HOME_SCALE * 0.15,
   };
 }
 
@@ -136,12 +178,26 @@ function frame(now) {
     shadowMesh.scale.set(PET_SCALE * 1.3 * shrink, PET_SCALE * 0.5 * shrink, 1);
   }
 
+  const toyRect = toyScreenRect();
+  const toyX = (toyRect.left + toyRect.right) / 2;
+
+  if (homeGroup) {
+    homeGroup.position.set(HOME_X, toWorldY(controller.y), -0.5);
+  }
+  if (toyAnchor) {
+    toyAnchor.position.set(toyX, toWorldY(controller.y), -0.3);
+    idleToy(toyGroup, controller.t, overToy);
+  }
+
   const rect = petScreenRect();
-  const nowOver = mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
-  if (nowOver !== overPet) {
-    overPet = nowOver;
-    window.petBridge.setHitRegion(overPet);
-    document.body.style.cursor = overPet ? 'pointer' : 'default';
+  const nowOverPet = mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
+  const nowOverToy =
+    mouseX >= toyRect.left && mouseX <= toyRect.right && mouseY >= toyRect.top && mouseY <= toyRect.bottom;
+  if (nowOverPet !== overPet || nowOverToy !== overToy) {
+    overPet = nowOverPet;
+    overToy = nowOverToy;
+    window.petBridge.setHitRegion(overPet || overToy);
+    document.body.style.cursor = overPet || overToy ? 'pointer' : 'default';
   }
 
   renderer.render(scene, camera);
