@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/permissionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/permission_needed"
+            android:textColor="@color/text_muted"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/grantPermissionButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/grant_overlay_permission" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/title_pick_pet"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/petRadioGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/petLoris"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Slow Loris"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/petWestie"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Westie Pup" />
+
+            <RadioButton
+                android:id="@+id/petSnail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Skate Snail" />
+
+            <RadioButton
+                android:id="@+id/petMouse"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Snack Mouse" />
+
+            <RadioButton
+                android:id="@+id/petKiwi"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Kiwi Bird" />
+
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/start_pet" />
+
+        <Button
+            android:id="@+id/stopButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/stop_pet" />
+
+    </LinearLayout>
+</ScrollView>

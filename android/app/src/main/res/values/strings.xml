@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DayDrinker</string>
+    <string name="title_pick_pet">Pick your pet</string>
+    <string name="grant_overlay_permission">Allow floating over other apps</string>
+    <string name="start_pet">Let it out</string>
+    <string name="stop_pet">Put it away</string>
+    <string name="permission_needed">DayDrinker needs the \"draw over other apps\" permission to roam your screen. Tap above to grant it.</string>
+    <string name="permission_granted">Permission granted — your pet can roam over other apps now.</string>
+    <string name="notification_channel_name">DayDrinker pet</string>
+    <string name="notification_title">Your pet is out</string>
+    <string name="notification_text">Tap to put it away.</string>
+</resources>
