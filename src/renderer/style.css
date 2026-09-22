@@ -15,3 +15,22 @@ html, body {
   height: 100%;
   background: transparent;
 }
+
+#nameInput {
+  position: absolute;
+  z-index: 10;
+  width: 160px;
+  padding: 6px 8px;
+  font: 14px "Comic Sans MS", "Segoe UI", system-ui, sans-serif;
+  color: #3b3320;
+  background: #f2e06a;
+  border: 2px solid #3b3320;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  outline: none;
+  user-select: text;
+}
+
+#nameInput[hidden] {
+  display: none;
+}

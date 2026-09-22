@@ -21,7 +21,14 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
   stands still, squishes happily, wags like mad and puffs out little hearts.
 - A plain click (no stroke) still toggles between "sit and stay right here"
   and "go wander."
-- A tray icon lets you swap between pets and force a sit/wander.
+- **Double-click a pet to name it.** A little input box pops up right over
+  it; type a name, hit Enter. It remembers.
+- **Keep up to 4 at once.** Add more pets from the tray (`Add a pet…`, picked
+  from the same Land/Birds/Sea Life list) and they all live on screen
+  together, each with its own home, mood, and name. You always keep at least
+  one — the tray won't let you send away your last buddy.
+- A tray icon lets you swap species, rename, or send away any crew member,
+  and force a sit/wander for everyone at once.
 - It animates on a deliberately chunky ~10fps clock, moves on a 2px grid and
   drops the occasional frame, and every pet gets a random permanent tilt and
   uneven squash when it loads. It's supposed to look like a cheap virtual pet
@@ -45,10 +52,13 @@ of one file. There's a desktop build (`/`, Electron) and an Android build
 Every pet has a home near the left edge of the screen, themed to what it is —
 grass and a kennel for land animals, a perch and birdbath for birds, a
 fishbowl for sea life — and it wanders back there on its own now and then.
+Add more pets and each one gets its own home lined up next to the last;
+remove one and the rest shuffle back over to close the gap.
 
-A shelf of toys sits next to it. Clicking a toy is never "click, link opens":
-the pet trots over and *does something* first, and the useful bit happens
-afterwards.
+One shelf of toys is shared by the whole crew, parked just past however many
+homes are currently out. Click a toy and whichever pet is closest and free
+trots over to use it — clicking is never "click, link opens": the pet *does
+something* first, and the useful bit happens afterwards.
 
 | Toy | What the pet does | What you get |
 | --- | --- | --- |
@@ -131,19 +141,36 @@ a sit, or quit.
 - `src/renderer/pets/*.js` — one file per species, each just a pile of
   primitives + a per-frame `update(t, state)` for its walk/idle/sit poses.
 - `src/renderer/petController.js` is the tiny state machine deciding where
-  the pet is walking to, when it pauses, and how much it's "sitting" — a
-  0–1 blend the pet models use to ease between standing and sitting rather
-  than a hard cut. It also biases wander targets toward `homeX` sometimes,
-  so the pet actually visits its kennel instead of just roaming forever.
+  a pet is walking to, when it pauses, and how much it's "sitting" — a 0–1
+  blend the pet models use to ease between standing and sitting rather than
+  a hard cut. It also biases wander targets toward `homeX` sometimes, so a
+  pet actually visits its home instead of just roaming forever.
+- **The crew.** `main.js`'s `PetInstance` class bundles everything one pet
+  needs — its own `PetController`, `PetState`, three.js groups, shadow mesh,
+  input/click bookkeeping — and `crew` is just an array of them, capped at
+  `MAX_CREW` (4). Each instance's home slot is its *index in that array*,
+  recomputed every frame (`HOME_X_BASE + slot * HOME_SLOT_SPACING`), so
+  homes stay contiguous — no gaps to track — when a pet is added or removed.
+  The shared toy shelf reads its own position off `crew.length` the same
+  way, so with one pet its toys sit right next door instead of parked where
+  a full house of four would need them.
+- **Naming.** Double-click routes to `beginRename()`, which positions the
+  plain `<input id="nameInput">` from `index.html` over that pet and asks
+  the main process to make the (normally `focusable: false`, so it never
+  steals focus just by existing) overlay window focusable for a moment —
+  `electron/main.js`'s `set-focusable` handler toggles it back off once you
+  hit Enter or Escape.
 - `src/renderer/environments.js` builds the three home types (land/birds/sea,
   picked via `src/renderer/pets/categories.js`) and the toy shelf. Toys are
   data: a `TOYS` array of `{ build, perform, action }`, so a new trick is one
-  builder plus one entry. Their clicks ride the same hit-region trick as the
-  pet itself — `main.js` keeps a hover box per toy and tells the main process
-  to stop ignoring the mouse only over those boxes.
+  builder plus one entry. A toy click hands the job to whichever crew member
+  is nearest and not already busy (`nearestIdleMember()`).
 - `src/renderer/petState.js` is the care loop (hunger, happiness, streak,
-  growth) as plain data with no rendering in it; `electron/main.js` persists
-  it to `daydrinker-state.json` in Electron's userData directory.
+  growth) as plain data with no rendering in it. `electron/main.js` persists
+  the whole crew — one `PetState` blob per member, plus name and species —
+  to `daydrinker-state.json` in Electron's userData directory; the tray's
+  crew submenus are rebuilt from a lightweight mirror of the same data the
+  main process keeps just for labels.
 - `src/renderer/sounds.js` synthesizes every noise with oscillators, and
   `src/renderer/particles.js` pools the hearts / notes / Z's / crumbs.
   `src/renderer/stickyNote.js` is the goose-mode note: a canvas texture on a

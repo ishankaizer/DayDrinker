@@ -9,6 +9,7 @@ import { StickyNote } from './stickyNote.js';
 import { PetState } from './petState.js';
 
 const canvas = document.getElementById('stage');
+const nameInput = document.getElementById('nameInput');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -48,26 +49,28 @@ const shadowTex = (() => {
   ctx.fillRect(0, 0, 128, 128);
   return new THREE.CanvasTexture(c);
 })();
-const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
-const shadowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMat);
-scene.add(shadowMesh);
+function makeShadowMesh() {
+  const mat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+  return new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+}
 
 const particles = new Particles(scene);
 const sounds = new Sounds();
 const note = new StickyNote(scene);
-let state = new PetState();
 
 const PET_SCALE = 90;
 const HOME_SCALE = 130;
-const HOME_X = 150;
+const HOME_X_BASE = 150;
+const HOME_SLOT_SPACING = 260; // each extra crew member's home, no toy row per home
+const MAX_CREW = 4;
 const TOY_SPACING = 95;
-const TOY_START_X = HOME_X + HOME_SCALE * 1.05;
 const SLEEP_AFTER_SECONDS = 180;
 const FOCUS_MINUTES = 25;
-const NUDGE_EVERY_MS = 45 * 60 * 1000; // a break nudge roughly every 45 min
-const NUDGE_TIMEOUT_MS = 25000; // it gives up eventually — never a dead end
+const NUDGE_EVERY_MS = 45 * 60 * 1000;
+const NUDGE_TIMEOUT_MS = 25000;
+const DOUBLE_CLICK_MS = 380;
 
-// -- deliberately bad framerate ------------------------------------------
+// -- deliberately bad framerate (shared clock: the whole crew stutters together) --
 const ANIM_FPS = 10;
 const MOVE_GRID = 2;
 let animT = 0;
@@ -75,39 +78,32 @@ let hitchUntil = 0;
 const stepped = (t) => Math.floor(t * ANIM_FPS) / ANIM_FPS;
 const snap = (px) => Math.round(px / MOVE_GRID) * MOVE_GRID;
 
-let currentPetId = DEFAULT_PET;
-let petHandle = null;
-let petGroup = null;
-let wagPivot = null;
-let petTilt = 0;
-let petSquashX = 1;
-let petSquashY = 1;
-
-let currentCategory = null;
-let homeGroup = null;
-const toyAnchors = []; // { def, anchor, inner, x }
-
-function loadHome(category) {
-  if (category === currentCategory) return;
-  currentCategory = category;
-  if (homeGroup) scene.remove(homeGroup);
-  homeGroup = buildHome(category);
-  homeGroup.scale.setScalar(HOME_SCALE);
-  scene.add(homeGroup);
+// -- toy shelf (shared prop row, not owned by any one pet) -----------------
+// Sits right after however many homes are actually on screen right now —
+// with the default single pet, that's one hop away, not a hike across a
+// household sized for four. It shifts a bit if you add/remove a pet, which
+// is a fair trade for not stranding your one buddy a thousand pixels out.
+const toyAnchors = [];
+TOYS.forEach((def, i) => {
+  const anchor = new THREE.Group();
+  anchor.scale.setScalar(HOME_SCALE * 0.55);
+  const inner = def.build();
+  anchor.add(inner);
+  scene.add(anchor);
+  toyAnchors.push({ def, anchor, inner, offset: i * TOY_SPACING, x: 0 });
+});
+function toyShelfStartX() {
+  return HOME_X_BASE + Math.max(1, crew.length) * HOME_SLOT_SPACING + 40;
 }
 
-function buildToyShelf() {
-  TOYS.forEach((def, i) => {
-    // The anchor carries the world scale and the toy's screen position; the
-    // inner group is left at scale 1 so idleToy() can own its hover pop and
-    // bob in model units without stomping the world scale.
-    const anchor = new THREE.Group();
-    anchor.scale.setScalar(HOME_SCALE * 0.55);
-    const inner = def.build();
-    anchor.add(inner);
-    scene.add(anchor);
-    toyAnchors.push({ def, anchor, inner, x: TOY_START_X + i * TOY_SPACING });
-  });
+// -- the crew ---------------------------------------------------------------
+const crew = []; // PetInstance[]
+let crewSeeded = false; // only the first of {loadState, onInit} gets to seed it
+let uidCounter = 0;
+function uid() {
+  // crypto.randomUUID() needs a secure context, which a file:// page may not
+  // reliably be — this is only ever a local scratch id anyway.
+  return `pet-${Date.now().toString(36)}-${(uidCounter++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function makeWagPivot(part) {
@@ -121,33 +117,135 @@ function makeWagPivot(part) {
   return pivot;
 }
 
-function loadPet(id) {
-  if (!PET_FACTORIES[id]) return;
-  if (petGroup) scene.remove(petGroup);
-  currentPetId = id;
-  petHandle = PET_FACTORIES[id]();
-  petGroup = petHandle.group;
-  wagPivot = makeWagPivot(petHandle.wag);
-  petTilt = (Math.random() * 2 - 1) * 0.07;
-  petSquashX = 1 + (Math.random() * 0.1 - 0.05);
-  petSquashY = 1 + (Math.random() * 0.1 - 0.05);
-  scene.add(petGroup);
-  loadHome(PET_CATEGORY[id] || 'land');
+class PetInstance {
+  constructor({ id, petId, name, stateJSON }) {
+    this.id = id;
+    this.name = name || null;
+    this.homeX = HOME_X_BASE; // recomputed every frame from its slot in `crew`
+
+    this.state = new PetState(stateJSON || {});
+    this.controller = new PetController(width, height);
+    this.controller.onRoutineEnd = (kind) => this.onRoutineEnd(kind);
+    this.controller.onNudgeArrived = () => this.onNudgeArrived();
+
+    this.shadowMesh = makeShadowMesh();
+    scene.add(this.shadowMesh);
+
+    this.homeGroup = null;
+    this.category = null;
+
+    this.petGroup = null;
+    this.petHandle = null;
+    this.wagPivot = null;
+    this.tilt = 0;
+    this.squashX = 1;
+    this.squashY = 1;
+
+    this.mouseDownOnPet = false;
+    this.downX = 0;
+    this.downY = 0;
+    this.strokeDistance = 0;
+    this.excited = 0;
+    this.joy = 0;
+    this.lastClickAt = 0;
+
+    this.focusEndsAt = 0;
+    this.lastNoteAt = 0;
+    this.lastCrumbAt = 0;
+    this.lastZAt = 0;
+    this.lastSnoreAt = 0;
+    this.singStep = 0;
+
+    this.setPetId(petId);
+  }
+
+  get busy() {
+    return this.controller.busy || this.controller.carried || this.controller.petting;
+  }
+
+  setPetId(petId) {
+    if (this.petGroup) scene.remove(this.petGroup);
+    this.petId = petId;
+    this.petHandle = PET_FACTORIES[petId]();
+    this.petGroup = this.petHandle.group;
+    this.wagPivot = makeWagPivot(this.petHandle.wag);
+    this.tilt = (Math.random() * 2 - 1) * 0.07;
+    this.squashX = 1 + (Math.random() * 0.1 - 0.05);
+    this.squashY = 1 + (Math.random() * 0.1 - 0.05);
+    scene.add(this.petGroup);
+    this.loadHome(PET_CATEGORY[petId] || 'land');
+  }
+
+  loadHome(category) {
+    if (category === this.category) return;
+    this.category = category;
+    if (this.homeGroup) scene.remove(this.homeGroup);
+    this.homeGroup = buildHome(category);
+    this.homeGroup.scale.setScalar(HOME_SCALE);
+    scene.add(this.homeGroup);
+  }
+
+  get displayName() {
+    return this.name || (PET_FACTORIES[this.petId] ? this.petId : 'pet');
+  }
+
+  toSaveJSON() {
+    return { id: this.id, petId: this.petId, name: this.name, state: this.state.toJSON() };
+  }
+
+  dispose() {
+    scene.remove(this.petGroup, this.homeGroup, this.shadowMesh);
+  }
+
+  onRoutineEnd(kind) {
+    if (kind === 'sing') window.petBridge.openSpotify();
+    if (kind === 'play') {
+      this.state.play();
+      saveSoon();
+      window.petBridge.openBrowser();
+    }
+    if (kind === 'eat') {
+      this.state.feed();
+      saveSoon();
+    }
+    if (kind === 'focus') {
+      // handled by the frame loop's focusEndsAt check
+    }
+  }
+
+  onNudgeArrived() {
+    sounds.demand();
+    note.show(nudgeText, Math.min(width - 130, this.controller.x + 130), toWorldY(this.controller.y) + 140);
+  }
 }
 
-loadPet(DEFAULT_PET);
-buildToyShelf();
+function addCrewMember({ id, petId, name = null, stateJSON = null }) {
+  if (crew.length >= MAX_CREW) return null;
+  const instance = new PetInstance({ id, petId, name, stateJSON });
+  crew.push(instance);
+  return instance;
+}
 
-const controller = new PetController(width, height);
-controller.setHome(HOME_X);
+function removeCrewMember(id) {
+  const idx = crew.findIndex((c) => c.id === id);
+  if (idx === -1 || crew.length <= 1) return;
+  crew[idx].dispose();
+  crew.splice(idx, 1);
+  if (activeDragId === id) activeDragId = null;
+  if (nudgeOwnerId === id) dismissNudge();
+}
 
-// -- work-buddy state -----------------------------------------------------
-let focusEndsAt = 0;
+function findCrew(id) {
+  return crew.find((c) => c.id === id) || null;
+}
+
+// -- work-buddy / goose-mode state (shared across the crew) ----------------
+let settings = { muted: false, nudges: true };
+let idleSeconds = 0;
 let nextNudgeAt = Date.now() + NUDGE_EVERY_MS;
 let nudgeText = '';
 let nudgeExpiresAt = 0;
-let settings = { muted: false, nudges: true };
-let idleSeconds = 0;
+let nudgeOwnerId = null;
 
 const BREAK_LINES = [
   'oi. stand up. stretch.',
@@ -156,78 +254,77 @@ const BREAK_LINES = [
   "you've been at this a while, buddy",
 ];
 
-function startFocus() {
-  focusEndsAt = Date.now() + FOCUS_MINUTES * 60 * 1000;
-  controller.performAt(toyX('clock'), 'focus');
+function nearestIdleMember(x) {
+  if (!crew.length) return null;
+  const idle = crew.filter((c) => !c.busy);
+  const pool = idle.length ? idle : crew;
+  return pool.reduce((best, c) => (Math.abs(c.controller.x - x) < Math.abs(best.controller.x - x) ? c : best));
+}
+
+function startFocus(member) {
+  const m = member || crew[0];
+  if (!m) return;
+  m.focusEndsAt = Date.now() + FOCUS_MINUTES * 60 * 1000;
+  m.controller.performAt(toyX('clock'), 'focus');
 }
 
 function cancelFocus() {
-  focusEndsAt = 0;
+  crew.forEach((c) => (c.focusEndsAt = 0));
 }
 
-function finishFocus() {
-  focusEndsAt = 0;
-  state.finishFocusSession();
+function finishFocus(member) {
+  member.focusEndsAt = 0;
+  member.state.finishFocusSession();
   saveSoon();
   sounds.fanfare();
-  showNudge(`focus done. that's ${state.sessionsToday} today, ${state.streak}-day streak`);
+  showNudge(`focus done. that's ${member.state.sessionsToday} today, ${member.state.streak}-day streak`, member);
 }
 
 function toyX(id) {
   const found = toyAnchors.find((t) => t.def.id === id);
-  return found ? found.x : HOME_X;
+  return found ? found.x : HOME_X_BASE;
 }
 
-// Goose mode: march over to the cursor and slap a note down.
-function showNudge(text) {
+function showNudge(text, forMember = null) {
+  if (!crew.length) return;
+  const member = forMember || nearestIdleMember(mouseX >= 0 ? mouseX : width / 2);
+  nudgeOwnerId = member.id;
   nudgeText = text;
   nudgeExpiresAt = Date.now() + NUDGE_TIMEOUT_MS;
-  const targetX = settings.nudges ? mouseX : controller.x;
-  controller.nudgeAt(targetX >= 0 ? targetX : width / 2);
+  const targetX = settings.nudges && mouseX >= 0 ? mouseX : member.controller.x;
+  member.controller.nudgeAt(targetX);
 }
 
 function dismissNudge() {
-  if (!note.visible && !controller.nudging) return;
+  const owner = nudgeOwnerId ? findCrew(nudgeOwnerId) : null;
+  if (owner) owner.controller.endNudge();
   note.hide();
   nudgeText = '';
   nudgeExpiresAt = 0;
-  controller.endNudge();
+  nudgeOwnerId = null;
 }
 
-controller.onNudgeArrived = () => {
-  sounds.demand();
-  note.show(nudgeText, Math.min(width - 130, controller.x + 130), toWorldY(controller.y) + 140);
-};
-
-controller.onRoutineEnd = (kind) => {
-  if (kind === 'sing') window.petBridge.openSpotify();
-  if (kind === 'play') {
-    state.play();
-    saveSoon();
-    window.petBridge.openBrowser();
-  }
-  if (kind === 'eat') {
-    state.feed();
-    saveSoon();
-  }
-};
-
-// -- persistence ----------------------------------------------------------
+// -- persistence ------------------------------------------------------------
 let saveTimer = 0;
 function saveSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.petBridge.saveState({ pet: state.toJSON() }), 400);
+  saveTimer = setTimeout(() => {
+    window.petBridge.saveState({ crew: crew.map((c) => c.toSaveJSON()) });
+  }, 400);
 }
-
-window.petBridge.loadState().then((saved) => {
-  if (saved?.pet) state = new PetState(saved.pet);
-  if (saved?.settings) applySettings(saved.settings);
-});
 
 function applySettings(next) {
   settings = { ...settings, ...next };
   sounds.setMuted(settings.muted);
 }
+
+window.petBridge.loadState().then((saved) => {
+  if (saved?.settings) applySettings(saved.settings);
+  if (!crewSeeded && Array.isArray(saved?.crew) && saved.crew.length) {
+    crewSeeded = true;
+    saved.crew.forEach((m) => addCrewMember({ id: m.id, petId: m.petId, name: m.name, stateJSON: m.state }));
+  }
+});
 
 function resize(w, h) {
   width = w;
@@ -236,50 +333,100 @@ function resize(w, h) {
   camera.top = h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
-  controller.resize(w, h);
+  crew.forEach((c) => c.controller.resize(w, h));
 }
 resize(width, height);
 
-window.petBridge.onInit(({ pet, bounds }) => {
-  if (pet) loadPet(pet);
+window.petBridge.onInit(({ crew: initialCrew, bounds }) => {
   if (bounds) resize(bounds.width, bounds.height);
+  if (crewSeeded) return; // loadState() already won the race
+  crewSeeded = true;
+  if (Array.isArray(initialCrew) && initialCrew.length) {
+    initialCrew.forEach((m) => addCrewMember({ id: m.id, petId: m.petId, name: m.name }));
+  } else {
+    addCrewMember({ id: uid(), petId: DEFAULT_PET });
+  }
 });
 window.petBridge.onBoundsChanged(({ width: w, height: h }) => resize(w, h));
-window.petBridge.onSetPet((id) => loadPet(id));
+window.petBridge.onSetPet(({ id, petId }) => findCrew(id)?.setPetId(petId));
+window.petBridge.onAddPet(({ id, petId }) => addCrewMember({ id, petId }));
+window.petBridge.onRemovePet(({ id }) => {
+  removeCrewMember(id);
+  saveSoon();
+});
 window.petBridge.onSettingsChanged(applySettings);
 window.petBridge.onIdleSeconds((secs) => {
   idleSeconds = secs;
-  controller.setIdleSeconds(secs, SLEEP_AFTER_SECONDS);
+  crew.forEach((c) => c.controller.setIdleSeconds(secs, SLEEP_AFTER_SECONDS));
 });
 window.petBridge.onRemindIn((mins) => {
   setTimeout(() => showNudge(`you asked me to nag you ${mins} minutes ago`), mins * 60 * 1000);
 });
 window.petBridge.onCommand((cmd) => {
-  if (cmd === 'sit') controller.forceSit();
-  if (cmd === 'wander') controller.forceWander();
-  if (cmd === 'focus-start') startFocus();
-  if (cmd === 'focus-cancel') cancelFocus();
-  if (cmd === 'sleep') controller.setIdleSeconds(SLEEP_AFTER_SECONDS + 1, SLEEP_AFTER_SECONDS);
-  if (cmd === 'wake') controller.setIdleSeconds(0, SLEEP_AFTER_SECONDS);
+  if (cmd === 'sit') crew.forEach((c) => c.controller.forceSit());
+  else if (cmd === 'wander') crew.forEach((c) => c.controller.forceWander());
+  else if (cmd === 'focus-start') startFocus(crew[0]);
+  else if (cmd === 'focus-cancel') cancelFocus();
+  else if (cmd === 'sleep') crew.forEach((c) => c.controller.setIdleSeconds(SLEEP_AFTER_SECONDS + 1, SLEEP_AFTER_SECONDS));
+  else if (cmd === 'wake') crew.forEach((c) => c.controller.setIdleSeconds(0, SLEEP_AFTER_SECONDS));
+  else if (cmd.startsWith('rename:')) {
+    const member = findCrew(cmd.slice('rename:'.length));
+    if (member) beginRename(member);
+  }
 });
 
-// -- input ---------------------------------------------------------------
-const PET_SLOP = 8; // below this, a mouse-up is a click rather than a stroke
-const CARRY_THRESHOLD = 60; // drag further than this and you've picked it up
+// -- renaming ----------------------------------------------------------------
+let renamingId = null;
+
+function beginRename(member) {
+  renamingId = member.id;
+  nameInput.value = member.name || '';
+  nameInput.hidden = false;
+  const screenX = Math.min(width - 170, Math.max(10, member.controller.x - 80));
+  const screenY = Math.max(4, member.controller.y - PET_SCALE * 1.7);
+  nameInput.style.left = `${screenX}px`;
+  nameInput.style.top = `${screenY}px`;
+  window.petBridge.setFocusable(true);
+  window.petBridge.setHitRegion(true);
+  // focus needs a tick after the window itself becomes focusable
+  requestAnimationFrame(() => {
+    nameInput.focus();
+    nameInput.select();
+  });
+}
+
+function endRename(commit) {
+  const member = renamingId ? findCrew(renamingId) : null;
+  if (member && commit) {
+    const trimmed = nameInput.value.trim().slice(0, 18);
+    member.name = trimmed || null;
+    saveSoon();
+  }
+  renamingId = null;
+  nameInput.hidden = true;
+  nameInput.blur();
+  window.petBridge.setFocusable(false);
+}
+
+nameInput.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') endRename(true);
+  if (e.key === 'Escape') endRename(false);
+});
+nameInput.addEventListener('blur', () => {
+  if (renamingId) endRename(true);
+});
+
+// -- input --------------------------------------------------------------
+const PET_SLOP = 8;
+const CARRY_THRESHOLD = 60;
 
 let mouseX = -1;
 let mouseY = -1;
-let overPet = false;
+let hitRegionOn = false;
+let activeDragId = null; // which crew member is currently being pressed/dragged
 let overToyIndex = -1;
 let overNote = false;
-let hitRegionOn = false;
-
-let mouseDownOnPet = false;
-let downX = 0;
-let downY = 0;
-let strokeDistance = 0;
-let excited = 0;
-let joy = 0;
 
 window.addEventListener('mousemove', (e) => {
   const dx = e.clientX - mouseX;
@@ -287,11 +434,12 @@ window.addEventListener('mousemove', (e) => {
   mouseX = e.clientX;
   mouseY = e.clientY;
 
-  if (!mouseDownOnPet) return;
+  const active = activeDragId ? findCrew(activeDragId) : null;
+  if (!active) return;
+  const controller = active.controller;
 
-  const fromDown = Math.hypot(e.clientX - downX, e.clientY - downY);
+  const fromDown = Math.hypot(e.clientX - active.downX, e.clientY - active.downY);
   if (fromDown > CARRY_THRESHOLD || controller.carried) {
-    // a decisive drag means you've scooped it up
     controller.carried = true;
     controller.petting = false;
     controller.x = Math.max(40, Math.min(width - 40, e.clientX));
@@ -300,13 +448,13 @@ window.addEventListener('mousemove', (e) => {
   }
 
   const moved = Math.hypot(dx, dy);
-  if (moved > 40) return; // ignore the jump on the first move after mousedown
-  strokeDistance += moved;
-  if (strokeDistance > 26) {
-    strokeDistance = 0;
-    joy = 1;
+  if (moved > 40) return;
+  active.strokeDistance += moved;
+  if (active.strokeDistance > 26) {
+    active.strokeDistance = 0;
+    active.joy = 1;
     controller.petting = true;
-    state.pet();
+    active.state.pet();
     saveSoon();
     if (Math.random() < 0.4) sounds.chirp();
     particles.spawn('heart', controller.x + (Math.random() * 2 - 1) * 20, toWorldY(controller.y) + PET_SCALE * 0.95, 14);
@@ -314,26 +462,41 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
-  if (!overPet) return;
-  mouseDownOnPet = true;
-  downX = e.clientX;
-  downY = e.clientY;
-  strokeDistance = 0;
+  const hit = crew.find((c) => inRect(petScreenRect(c)));
+  if (!hit) return;
+  activeDragId = hit.id;
+  hit.mouseDownOnPet = true;
+  hit.downX = e.clientX;
+  hit.downY = e.clientY;
+  hit.strokeDistance = 0;
 });
 
 window.addEventListener('mouseup', (e) => {
+  const active = activeDragId ? findCrew(activeDragId) : null;
+  activeDragId = null;
+  if (!active) return;
+  const controller = active.controller;
   const wasPetting = controller.petting;
   const wasCarried = controller.carried;
-  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+  const moved = Math.hypot(e.clientX - active.downX, e.clientY - active.downY);
 
   if (wasCarried) {
-    sounds.chirp(); // dropped — it plops back to the floor
-  } else if (mouseDownOnPet && !wasPetting && moved < PET_SLOP) {
-    if (controller.nudging) dismissNudge();
-    else controller.toggleSit();
+    sounds.chirp();
+  } else if (active.mouseDownOnPet && !wasPetting && moved < PET_SLOP) {
+    if (controller.nudging) {
+      dismissNudge();
+    } else {
+      const now = performance.now();
+      if (now - active.lastClickAt < DOUBLE_CLICK_MS) {
+        beginRename(active);
+      } else {
+        controller.toggleSit();
+      }
+      active.lastClickAt = now;
+    }
   }
 
-  mouseDownOnPet = false;
+  active.mouseDownOnPet = false;
   controller.petting = false;
   controller.carried = false;
 });
@@ -343,20 +506,21 @@ window.addEventListener('click', () => {
     dismissNudge();
     return;
   }
-  if (overPet) return; // the pet's own click is handled on mouseup
-  if (overToyIndex >= 0) {
+  if (activeDragId) return; // the pet's own click is handled on mouseup
+  if (overToyIndex >= 0 && crew.length) {
     const toy = toyAnchors[overToyIndex];
-    if (toy.def.action === 'focus') startFocus();
-    else controller.performAt(toy.x - PET_SCALE * 0.5, toy.def.perform);
+    const performer = nearestIdleMember(toy.x);
+    if (toy.def.action === 'focus') startFocus(performer);
+    else if (performer) performer.controller.performAt(toy.x - PET_SCALE * 0.5, toy.def.perform);
   }
 });
 
-function petScreenRect() {
+function petScreenRect(member) {
   const halfW = PET_SCALE * 0.65;
-  const screenY = controller.y - controller.carryY;
+  const screenY = member.controller.y - member.controller.carryY;
   return {
-    left: controller.x - halfW,
-    right: controller.x + halfW,
+    left: member.controller.x - halfW,
+    right: member.controller.x + halfW,
     top: screenY - PET_SCALE * 1.3,
     bottom: screenY + PET_SCALE * 0.25,
   };
@@ -367,8 +531,8 @@ function toyScreenRect(toy) {
   return {
     left: toy.x - halfW,
     right: toy.x + halfW,
-    top: controller.y - HOME_SCALE * 0.7,
-    bottom: controller.y + HOME_SCALE * 0.15,
+    top: (crew[0]?.controller.y ?? height) - HOME_SCALE * 0.7,
+    bottom: (crew[0]?.controller.y ?? height) + HOME_SCALE * 0.15,
   };
 }
 
@@ -376,13 +540,8 @@ function inRect(rect) {
   return mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
 }
 
-// -- frame ---------------------------------------------------------------
+// -- frame --------------------------------------------------------------
 let lastTime = performance.now();
-let lastNoteAt = 0;
-let lastCrumbAt = 0;
-let lastZAt = 0;
-let lastSnoreAt = 0;
-let singStep = 0;
 
 function frame(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
@@ -394,124 +553,126 @@ function frame(now) {
   }
   const animTime = stepped(animT);
 
-  state.tick(dt);
-  if (state.dirty) {
-    state.clearDirty();
-    saveSoon();
-  }
-
-  // mood affects how briskly it gets about: hungry and sad pets dawdle, and
-  // everything is slower late at night
   const hour = new Date().getHours();
   const timeEnergy = hour < 7 || hour >= 22 ? 0.65 : hour < 10 ? 0.85 : 1;
-  controller.energy = state.energy * timeEnergy;
 
-  controller.noticeCursor(mouseX, mouseY, now);
-  controller.update(dt);
+  crew.forEach((c) => {
+    c.state.tick(dt);
+    if (c.state.dirty) {
+      c.state.clearDirty();
+      saveSoon();
+    }
+    c.controller.energy = c.state.energy * timeEnergy;
+    if (!renamingId) c.controller.noticeCursor(mouseX, mouseY, now);
+    c.controller.update(dt);
+
+    if (c.focusEndsAt && Date.now() >= c.focusEndsAt) finishFocus(c);
+  });
   particles.update(dt);
   note.update(animTime);
 
-  // focus session bookkeeping
-  if (focusEndsAt && Date.now() >= focusEndsAt) finishFocus();
-
-  // break nudges — only if you've left them switched on
-  if (settings.nudges && !controller.nudging && !note.visible && Date.now() >= nextNudgeAt && idleSeconds < 60) {
+  if (
+    settings.nudges &&
+    !renamingId &&
+    !crew.some((c) => c.controller.nudging) &&
+    !note.visible &&
+    Date.now() >= nextNudgeAt &&
+    idleSeconds < 60 &&
+    crew.length
+  ) {
     nextNudgeAt = Date.now() + NUDGE_EVERY_MS;
     showNudge(BREAK_LINES[Math.floor(Math.random() * BREAK_LINES.length)]);
   }
-  // and it always eventually gives up, so you can never get stuck
   if (nudgeExpiresAt && Date.now() >= nudgeExpiresAt) dismissNudge();
 
-  excited += ((overPet || controller.petting ? 1 : 0) - excited) * Math.min(1, dt * 8);
-  joy = Math.max(0, joy - dt * 1.6);
+  crew.forEach((member, slot) => {
+    const controller = member.controller;
+    member.homeX = HOME_X_BASE + slot * HOME_SLOT_SPACING;
+    controller.setHome(member.homeX);
+    const overThis = inRect(petScreenRect(member));
+    member.excited += ((overThis || controller.petting ? 1 : 0) - member.excited) * Math.min(1, dt * 8);
+    member.joy = Math.max(0, member.joy - dt * 1.6);
 
-  if (petGroup) {
     const petX = snap(controller.x);
     const petY = toWorldY(controller.y) + controller.carryY;
-    const sleeping = controller.sleeping;
 
-    if (petHandle?.update) {
-      petHandle.update(animTime, {
+    if (member.petHandle?.update) {
+      member.petHandle.update(animTime, {
         walking: controller.walking,
         sitAmount: controller.sitAmount,
-        excited,
+        excited: member.excited,
         singing: controller.routine === 'sing',
       });
     }
 
-    const wagAmount = Math.max(excited, joy, controller.nudging ? 0.8 : 0);
-    if (wagPivot) wagPivot.rotation.z = Math.sin(animTime * 42) * 0.55 * wagAmount;
+    const wagAmount = Math.max(member.excited, member.joy, controller.nudging ? 0.8 : 0);
+    if (member.wagPivot) member.wagPivot.rotation.z = Math.sin(animTime * 42) * 0.55 * wagAmount;
 
-    // per-routine flourishes
     let lift = 0;
     if (controller.routine === 'sing') {
       lift = Math.abs(Math.sin(animTime * 7)) * 10;
-      if (now - lastNoteAt > 220) {
-        lastNoteAt = now;
+      if (now - member.lastNoteAt > 220) {
+        member.lastNoteAt = now;
         particles.spawn('note', petX + (Math.random() * 2 - 1) * 18, petY + PET_SCALE * 1.05, 16);
-        sounds.sing(singStep++);
+        sounds.sing(member.singStep++);
       }
     } else if (controller.routine === 'eat') {
       lift = -4;
-      if (now - lastCrumbAt > 260) {
-        lastCrumbAt = now;
+      if (now - member.lastCrumbAt > 260) {
+        member.lastCrumbAt = now;
         particles.spawn('crumb', petX + (Math.random() * 2 - 1) * 14, petY + PET_SCALE * 0.5, 10);
         sounds.munch();
       }
     } else if (controller.routine === 'play') {
-      lift = Math.abs(Math.sin(animTime * 12)) * 16; // bouncing after the ball
-    } else if (sleeping) {
-      if (now - lastZAt > 1400) {
-        lastZAt = now;
+      lift = Math.abs(Math.sin(animTime * 12)) * 16;
+    } else if (controller.sleeping) {
+      if (now - member.lastZAt > 1400) {
+        member.lastZAt = now;
         particles.spawn('zzz', petX + 18, petY + PET_SCALE * 1.0, 13);
       }
-      if (now - lastSnoreAt > 4200) {
-        lastSnoreAt = now;
+      if (now - member.lastSnoreAt > 4200) {
+        member.lastSnoreAt = now;
         sounds.snore();
       }
     } else if (controller.waking > 0) {
-      lift = Math.sin((1.6 - controller.waking) * 4) * 8; // a stretch
+      lift = Math.sin((1.6 - controller.waking) * 4) * 8;
     }
+    if (controller.nudging) lift = Math.abs(Math.sin(animTime * 10)) * 12;
 
-    if (controller.nudging) {
-      lift = Math.abs(Math.sin(animTime * 10)) * 12; // hopping to be noticed
-    }
-
-    const squish = 1 - joy * 0.12;
-    // it grows a little as you keep it alive, and droops when it's unhappy
-    const grown = 1 + state.growth * 0.12;
-    const droop = state.isSad ? 0.96 : 1;
-    petGroup.position.set(petX, petY + lift, 0);
-    petGroup.rotation.z = petTilt + Math.sin(animTime * 5) * 0.03 * wagAmount + (controller.carried ? 0.2 : 0);
-    petGroup.scale.set(
-      PET_SCALE * petSquashX * grown * (controller.facing < 0 ? -1 : 1),
-      PET_SCALE * petSquashY * grown * squish * droop,
+    const squish = 1 - member.joy * 0.12;
+    const grown = 1 + member.state.growth * 0.12;
+    const droop = member.state.isSad ? 0.96 : 1;
+    member.petGroup.position.set(petX, petY + lift, 0);
+    member.petGroup.rotation.z = member.tilt + Math.sin(animTime * 5) * 0.03 * wagAmount + (controller.carried ? 0.2 : 0);
+    member.petGroup.scale.set(
+      PET_SCALE * member.squashX * grown * (controller.facing < 0 ? -1 : 1),
+      PET_SCALE * member.squashY * grown * squish * droop,
       PET_SCALE * grown
     );
 
-    shadowMesh.position.set(petX, toWorldY(controller.y + 6), -1);
+    member.shadowMesh.position.set(petX, toWorldY(controller.y + 6), -1);
     const shrink = (1 - controller.sitAmount * 0.15) * (1 - Math.min(0.5, controller.carryY / 300));
-    shadowMesh.scale.set(PET_SCALE * 1.3 * shrink, PET_SCALE * 0.5 * shrink, 1);
-  }
+    member.shadowMesh.scale.set(PET_SCALE * 1.3 * shrink, PET_SCALE * 0.5 * shrink, 1);
 
-  if (homeGroup) homeGroup.position.set(HOME_X, toWorldY(controller.y), -0.5);
+    if (member.homeGroup) member.homeGroup.position.set(member.homeX, toWorldY(controller.y), -0.5);
+  });
 
+  const groundY = crew[0]?.controller.y ?? height - 70;
+  const shelfStartX = toyShelfStartX();
   overToyIndex = -1;
   toyAnchors.forEach((toy, i) => {
-    const rect = toyScreenRect(toy);
-    const hovered = inRect(rect);
+    toy.x = shelfStartX + toy.offset;
+    const hovered = inRect(toyScreenRect(toy));
     if (hovered) overToyIndex = i;
-    toy.anchor.position.set(toy.x, toWorldY(controller.y), -0.3);
+    toy.anchor.position.set(toy.x, toWorldY(groundY), -0.3);
     idleToy(toy.inner, animTime + i, hovered);
   });
 
-  overPet = inRect(petScreenRect());
   overNote = note.visible && inRect(note.rect(toScreenY));
 
-  // While it's pestering you, the pet itself is the click target — that's
-  // the whole point of goose mode — but a click anywhere on it or its note
-  // dismisses, and the nudge times out on its own regardless.
-  const wantHit = overPet || overToyIndex >= 0 || overNote || mouseDownOnPet || controller.nudging;
+  const anyPetHover = crew.some((c) => inRect(petScreenRect(c)));
+  const anyNudging = crew.some((c) => c.controller.nudging);
+  const wantHit = anyPetHover || overToyIndex >= 0 || overNote || activeDragId !== null || anyNudging || !!renamingId;
   if (wantHit !== hitRegionOn) {
     hitRegionOn = wantHit;
     window.petBridge.setHitRegion(wantHit);

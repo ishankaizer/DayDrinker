@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, screen, ipcMain, nativeImage, shell, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Everything the pet remembers between runs (mood, streak, settings).
 let statePath = null;
@@ -60,8 +61,14 @@ const PET_CATEGORIES = [
     },
   },
 ];
+const PET_LABELS = Object.fromEntries(PET_CATEGORIES.flatMap((c) => Object.entries(c.pets)));
 
-let currentPet = 'loris';
+const MAX_CREW = 4;
+
+// The main process only needs enough of the crew to label the tray — the
+// renderer is the source of truth for actual state (mood, position, etc)
+// and pushes its full picture back through save-state after every change.
+let crewSummary = [{ id: crypto.randomUUID(), petId: 'loris', name: null }];
 
 function createWindow() {
   const display = screen.getPrimaryDisplay();
@@ -95,7 +102,7 @@ function createWindow() {
 
   win.webContents.on('did-finish-load', () => {
     win.webContents.send('init', {
-      pet: currentPet,
+      crew: crewSummary,
       bounds: { width, height },
     });
   });
@@ -120,33 +127,78 @@ function buildTray() {
   rebuildMenu();
 }
 
+function memberLabel(member) {
+  const species = PET_LABELS[member.petId] || member.petId;
+  return member.name ? `${member.name} (${species})` : species;
+}
+
 function rebuildMenu() {
-  const petSubmenu = (pets) =>
-    Object.entries(pets).map(([id, label]) => ({
+  const speciesSubmenu = (member) =>
+    PET_CATEGORIES.map((cat) => ({
+      label: cat.label,
+      submenu: Object.entries(cat.pets).map(([id, label]) => ({
+        label,
+        type: 'radio',
+        checked: member.petId === id,
+        click: () => {
+          member.petId = id;
+          win?.webContents.send('set-pet', { id: member.id, petId: id });
+          rebuildMenu();
+        },
+      })),
+    }));
+
+  const crewSubmenu = crewSummary.map((member) => ({
+    label: `🐾 ${memberLabel(member)}`,
+    submenu: [
+      { label: 'Change species', submenu: speciesSubmenu(member) },
+      {
+        label: 'Rename…',
+        click: () => win?.webContents.send('command', `rename:${member.id}`),
+      },
+      { type: 'separator' },
+      {
+        label: 'Send it away',
+        enabled: crewSummary.length > 1,
+        click: () => {
+          crewSummary = crewSummary.filter((m) => m.id !== member.id);
+          win?.webContents.send('remove-pet', { id: member.id });
+          rebuildMenu();
+        },
+      },
+    ],
+  }));
+
+  const addSubmenu = PET_CATEGORIES.map((cat) => ({
+    label: cat.label,
+    submenu: Object.entries(cat.pets).map(([id, label]) => ({
       label,
-      type: 'radio',
-      checked: currentPet === id,
       click: () => {
-        currentPet = id;
-        win?.webContents.send('set-pet', id);
+        const id2 = crypto.randomUUID();
+        crewSummary.push({ id: id2, petId: id, name: null });
+        win?.webContents.send('add-pet', { id: id2, petId: id });
         rebuildMenu();
       },
-    }));
+    })),
+  }));
 
   const template = [
     { label: 'DayDrinker', enabled: false },
     { type: 'separator' },
-    ...PET_CATEGORIES.map((cat) => ({
-      label: cat.label,
-      submenu: petSubmenu(cat.pets),
-    })),
+    { label: 'Crew', enabled: false },
+    ...crewSubmenu,
+    {
+      label: 'Add a pet…',
+      enabled: crewSummary.length < MAX_CREW,
+      submenu: addSubmenu,
+    },
     { type: 'separator' },
     {
-      label: 'Make it sit',
+      label: 'Make them all sit',
       click: () => win?.webContents.send('command', 'sit'),
     },
     {
-      label: 'Let it wander',
+      label: 'Let them all wander',
       click: () => win?.webContents.send('command', 'wander'),
     },
     { type: 'separator' },
@@ -167,7 +219,7 @@ function rebuildMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Let it pester me (goose mode)',
+      label: 'Let them pester me (goose mode)',
       type: 'checkbox',
       checked: settings.nudges,
       click: (item) => {
@@ -177,7 +229,7 @@ function rebuildMenu() {
       },
     },
     {
-      label: 'Mute its noises',
+      label: 'Mute their noises',
       type: 'checkbox',
       checked: settings.muted,
       click: (item) => {
@@ -196,16 +248,24 @@ function rebuildMenu() {
   tray.setContextMenu(Menu.buildFromTemplate(template));
 }
 
-// Renderer tells us whether the mouse is currently over the pet sprite,
-// so the rest of the transparent overlay stays fully click-through.
+// Renderer tells us whether the mouse is currently over a pet/toy/note, so
+// the rest of the transparent overlay stays fully click-through.
 ipcMain.on('set-hit-region', (_evt, isOverPet) => {
   if (!win) return;
   win.setIgnoreMouseEvents(!isOverPet, { forward: true });
 });
 
-// Clicking the musical toy by the pet's home: try the Spotify desktop app's
-// own URI scheme first (spotify:), and fall back to the web player if
-// nothing on the system claims it.
+// The overlay window is permanently focusable:false so it never steals
+// focus just by existing — but a rename needs real keyboard input, so the
+// renderer asks for a brief, explicit window into being focusable.
+ipcMain.on('set-focusable', (_evt, canFocus) => {
+  if (!win) return;
+  win.setFocusable(canFocus);
+  if (canFocus) win.focus();
+});
+
+// Clicking the musical toy: try the Spotify desktop app's own URI scheme
+// first (spotify:), and fall back to the web player if nothing claims it.
 ipcMain.on('open-spotify', async () => {
   try {
     await shell.openExternal('spotify:');
@@ -224,7 +284,12 @@ function loadState() {
     const raw = fs.readFileSync(statePath, 'utf8');
     const parsed = JSON.parse(raw);
     if (parsed.settings) settings = { ...settings, ...parsed.settings };
-    if (parsed.pet) currentPet = parsed.pet;
+    if (Array.isArray(parsed.crew) && parsed.crew.length) {
+      crewSummary = parsed.crew.map((m) => ({ id: m.id, petId: m.petId, name: m.name ?? null }));
+    } else if (parsed.pet) {
+      // migrating an old single-pet save
+      crewSummary = [{ id: crypto.randomUUID(), petId: parsed.pet, name: null }];
+    }
     return parsed;
   } catch {
     return {}; // no save yet (or it got corrupted) — start fresh, don't crash
@@ -240,7 +305,10 @@ function saveState(patch) {
         return {};
       }
     })();
-    const next = { ...existing, ...patch, settings, pet: currentPet };
+    const next = { ...existing, ...patch, settings };
+    if (patch.crew) {
+      crewSummary = patch.crew.map((m) => ({ id: m.id, petId: m.petId, name: m.name ?? null }));
+    }
     fs.writeFileSync(statePath, JSON.stringify(next, null, 2));
   } catch (err) {
     console.error('DayDrinker: could not save state', err);
@@ -248,10 +316,13 @@ function saveState(patch) {
 }
 
 ipcMain.handle('load-state', () => ({ ...loadState(), settings }));
-ipcMain.on('save-state', (_evt, patch) => saveState(patch));
+ipcMain.on('save-state', (_evt, patch) => {
+  saveState(patch);
+  rebuildMenu(); // crew names/species may have changed
+});
 
 // -- idle detection -------------------------------------------------------
-// The pet dozes off when you walk away and stretches when you come back.
+// The pets doze off when you walk away and stretch when you come back.
 function startIdleWatch() {
   setInterval(() => {
     if (!win) return;
