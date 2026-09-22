@@ -117,9 +117,11 @@ npm start
 
 Or just double-click **`run.bat`** (Windows) or run **`./run.sh`** (macOS/
 Linux) from the repo root — either installs dependencies on first run (needs
-[Node.js](https://nodejs.org) installed) and then launches it. No packaged
-`.exe` yet; these scripts are the "just run the thing" option in the
-meantime.
+[Node.js](https://nodejs.org) installed) and then launches it. On Windows,
+`run.bat` also drops a **"DayDrinker" shortcut on your Desktop** the first
+time it runs, so every time after that you don't need to open this folder
+again — just double-click the Desktop icon. No packaged `.exe` yet; these
+scripts are the "just run the thing" option in the meantime.
 
 The app has no window chrome — look for the tray icon to change pets, force
 a sit, or quit.
