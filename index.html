@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DayDrinker — browser sandbox</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      cursor: default;
+      user-select: none;
+    }
+
+    /* ---- fake Windows desktop, just enough context to judge scale/placement ---- */
+    #desktop {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(160deg, #1f6fb8 0%, #2d4f8f 45%, #17243f 100%);
+      z-index: 0;
+    }
+    #desktop::before {
+      /* a few soft "clouds" so it doesn't read as a flat gradient swatch */
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 700px 300px at 15% 20%, rgba(255,255,255,0.08), transparent),
+        radial-gradient(ellipse 900px 400px at 85% 60%, rgba(255,255,255,0.06), transparent);
+    }
+
+    .desktop-icon {
+      position: absolute;
+      width: 76px;
+      text-align: center;
+      color: #fff;
+      font-size: 12px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .desktop-icon .glyph {
+      width: 38px;
+      height: 38px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    #taskbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 48px;
+      background: rgba(15, 20, 30, 0.72);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      z-index: 5;
+      color: #fff;
+    }
+    .task-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: rgba(255,255,255,0.06);
+    }
+    .task-btn.start { background: #2d7dd2; font-weight: bold; }
+    #taskbar .spacer { flex: 1; }
+    #clock {
+      font-size: 12px;
+      line-height: 1.3;
+      text-align: right;
+      padding-right: 10px;
+      opacity: 0.9;
+    }
+
+    /* ---- the actual pet overlay: identical stacking to the real app ---- */
+    #stage {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      display: block;
+      background: transparent;
+    }
+    #nameInput {
+      position: absolute;
+      z-index: 10;
+      width: 160px;
+      padding: 6px 8px;
+      font: 14px "Comic Sans MS", "Segoe UI", system-ui, sans-serif;
+      color: #3b3320;
+      background: #f2e06a;
+      border: 2px solid #3b3320;
+      border-radius: 3px;
+      box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+      outline: none;
+      user-select: text;
+    }
+    #nameInput[hidden] { display: none; }
+
+    /* ---- dev control panel — not part of the "desktop", just for us ---- */
+    #devPanel {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      width: 230px;
+      background: rgba(20, 20, 24, 0.82);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 10px;
+      color: #eee;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #devPanel h1 {
+      font-size: 12px;
+      margin: 0 0 2px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      opacity: 0.6;
+    }
+    #devPanel select, #devPanel button {
+      font: inherit;
+      background: #2a2a30;
+      color: #eee;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 5px;
+      padding: 5px 6px;
+      cursor: pointer;
+    }
+    #devPanel button:hover, #devPanel select:hover { background: #34343c; }
+    .devRow { display: flex; gap: 6px; }
+    .devRow > * { flex: 1; }
+    #devLog {
+      max-height: 90px;
+      overflow-y: auto;
+      font-size: 10px;
+      opacity: 0.65;
+      line-height: 1.4;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 6px;
+    }
+    #panelToggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 21;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(20,20,24,0.82);
+      color: #eee;
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #devPanel[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <div id="desktop">
+    <div class="desktop-icon" style="left:24px; top:24px;">
+      <div class="glyph">🗑️</div>
+      Recycle Bin
+    </div>
+    <div class="desktop-icon" style="left:24px; top:104px;">
+      <div class="glyph">💻</div>
+      This PC
+    </div>
+  </div>
+
+  <div id="taskbar">
+    <div class="task-btn start">⊞</div>
+    <div class="task-btn">🔍</div>
+    <div class="task-btn">📁</div>
+    <div class="spacer"></div>
+    <div id="clock"></div>
+  </div>
+
+  <canvas id="stage"></canvas>
+  <input id="nameInput" type="text" maxlength="18" autocomplete="off" spellcheck="false" hidden />
+
+  <button id="panelToggle" title="Show/hide dev panel">⚙️</button>
+  <div id="devPanel">
+    <h1>Sandbox controls</h1>
+    <div class="devRow">
+      <select id="petPicker"></select>
+    </div>
+    <div class="devRow">
+      <button id="addPetBtn">+ Add pet</button>
+      <button id="removePetBtn">− Remove</button>
+    </div>
+    <div class="devRow">
+      <button id="sitBtn">Sit</button>
+      <button id="wanderBtn">Wander</button>
+    </div>
+    <div class="devRow">
+      <button id="focusBtn">Focus 25m</button>
+      <button id="nudgeBtn">Nudge now</button>
+    </div>
+    <div class="devRow">
+      <button id="muteBtn">Mute: off</button>
+      <button id="resetBtn">Reset state</button>
+    </div>
+    <div id="devLog"></div>
+  </div>
+
+  <script>
+    // Clock, purely cosmetic
+    function tickClock() {
+      const el = document.getElementById('clock');
+      const now = new Date();
+      const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const date = now.toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' });
+      el.textContent = time + '\n' + date;
+    }
+    tickClock();
+    setInterval(tickClock, 15000);
+
+    document.getElementById('panelToggle').addEventListener('click', () => {
+      const panel = document.getElementById('devPanel');
+      panel.hidden = !panel.hidden;
+    });
+
+    // ---- window.petBridge: a browser-native stand-in for the Electron
+    // preload bridge. Everything OS-level (window focus, click-through,
+    // opening external apps) becomes a no-op or a plain window.open; state
+    // persists to localStorage instead of a userData JSON file. The actual
+    // pet renderer (src/renderer/main.js and everything it imports) is
+    // completely unmodified — this is the only thing standing in for
+    // Electron, so a fix made here is the same fix in the real app.
+    (function () {
+      const STORAGE_KEY = 'daydrinker-sandbox-state';
+      const listeners = {};
+      function on(channel, cb) {
+        (listeners[channel] = listeners[channel] || []).push(cb);
+      }
+      function emit(channel, payload) {
+        (listeners[channel] || []).forEach((cb) => cb(payload));
+      }
+      function log(msg) {
+        const el = document.getElementById('devLog');
+        const line = document.createElement('div');
+        line.textContent = msg;
+        el.prepend(line);
+        while (el.childNodes.length > 30) el.removeChild(el.lastChild);
+      }
+
+      let uidCounter = 0;
+      const uid = () => 'sandbox-' + Date.now().toString(36) + '-' + (uidCounter++);
+
+      function loadSaved() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+        } catch {
+          return {};
+        }
+      }
+
+      window.petBridge = {
+        onInit: (cb) => on('init', cb),
+        onBoundsChanged: (cb) => on('bounds-changed', cb),
+        onSetPet: (cb) => on('set-pet', cb),
+        onAddPet: (cb) => on('add-pet', cb),
+        onRemovePet: (cb) => on('remove-pet', cb),
+        onCommand: (cb) => on('command', cb),
+        onIdleSeconds: () => {}, // no OS idle signal in a browser tab; never sleeps here
+        onRemindIn: (cb) => on('remind-in', cb),
+        onSettingsChanged: (cb) => on('settings-changed', cb),
+
+        setHitRegion: () => {}, // the canvas is normal page content — no click-through trick needed
+        setFocusable: () => {}, // the <input> can always take focus in a browser tab
+
+        openSpotify: () => {
+          log('→ would open Spotify');
+          window.open('https://open.spotify.com', '_blank');
+        },
+        openBrowser: () => {
+          log('→ would open browser link');
+          window.open('https://news.ycombinator.com', '_blank');
+        },
+
+        loadState: () => Promise.resolve(loadSaved()),
+        saveState: (patch) => {
+          const next = { ...loadSaved(), ...patch };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        },
+      };
+
+      window.addEventListener('resize', () => {
+        emit('bounds-changed', { width: window.innerWidth, height: window.innerHeight });
+      });
+
+      window.addEventListener('DOMContentLoaded', () => {
+        emit('init', {
+          crew: [{ id: uid(), petId: 'loris', name: null }],
+          bounds: { width: window.innerWidth, height: window.innerHeight },
+        });
+      });
+
+      // -- dev panel wiring --
+      const PET_CATEGORIES = [
+        { label: 'Land', pets: { loris: 'Slow Loris', westie: 'Westie Pup', mouse: 'Snack Mouse', rat: 'Gray Rat', squirrel: 'Squirrel', deer: 'Little Deer', sheep: 'Sheep', monkey: 'Monkey', hotdogmonkey: 'Hot Dog Monkey', frog: 'Frog', bat: 'Bat' } },
+        { label: 'Birds', pets: { kiwi: 'Kiwi Bird', chicken: 'Chicken', rooster: 'Rooster', duck: 'Duck', duckling: 'Duckling', pigeon: 'Pigeon', seagull: 'Seagull', budgie: 'Budgie' } },
+        { label: 'Sea Life', pets: { snail: 'Skate Snail', shark: 'Shark', turtle: 'Turtle', octopus: 'Octopus', clownfish: 'Clownfish', angelfish: 'Angelfish', stingray: 'Stingray', mantaray: 'Manta Ray', crab: 'Crab', hermitcrab: 'Hermit Crab', shrimp: 'Shrimp' } },
+      ];
+
+      const picker = document.getElementById('petPicker');
+      PET_CATEGORIES.forEach((cat) => {
+        const group = document.createElement('optgroup');
+        group.label = cat.label;
+        Object.entries(cat.pets).forEach(([id, label]) => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = label;
+          group.appendChild(opt);
+        });
+        picker.appendChild(group);
+      });
+
+      let lastCrewIds = [];
+      const origSaveState = window.petBridge.saveState;
+      window.petBridge.saveState = (patch) => {
+        if (patch.crew) lastCrewIds = patch.crew.map((m) => m.id);
+        origSaveState(patch);
+      };
+
+      picker.addEventListener('change', () => {
+        const targetId = lastCrewIds[0];
+        if (!targetId) return;
+        emit('set-pet', { id: targetId, petId: picker.value });
+        log('species → ' + picker.value);
+      });
+
+      document.getElementById('addPetBtn').addEventListener('click', () => {
+        if (lastCrewIds.length >= 4) { log('already at 4 pets, max crew'); return; }
+        const id = uid();
+        emit('add-pet', { id, petId: picker.value });
+        log('added ' + picker.value);
+      });
+      document.getElementById('removePetBtn').addEventListener('click', () => {
+        if (lastCrewIds.length <= 1) { log('can\'t remove your last pet'); return; }
+        const id = lastCrewIds[lastCrewIds.length - 1];
+        emit('remove-pet', { id });
+        log('removed last-added pet');
+      });
+
+      document.getElementById('sitBtn').addEventListener('click', () => emit('command', 'sit'));
+      document.getElementById('wanderBtn').addEventListener('click', () => emit('command', 'wander'));
+      document.getElementById('focusBtn').addEventListener('click', () => emit('command', 'focus-start'));
+      document.getElementById('nudgeBtn').addEventListener('click', () => { emit('remind-in', 0); log('nudge requested'); });
+
+      let muted = false;
+      document.getElementById('muteBtn').addEventListener('click', (e) => {
+        muted = !muted;
+        e.target.textContent = 'Mute: ' + (muted ? 'on' : 'off');
+        emit('settings-changed', { muted, nudges: true });
+      });
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY);
+        log('state cleared — reload the page');
+      });
+    })();
+  </script>
+
+  <script type="module" src="src/renderer/main.js"></script>
+</body>
+</html>

@@ -3,8 +3,34 @@
 A dumb little low-poly, PS2-era desktop pet. It lives on your screen, wanders
 around the bottom of it, sits when you tell it to, and otherwise does
 basically nothing — like a Figma pet, but roaming your whole monitor instead
-of one file. There's a desktop build (`/`, Electron) and an Android build
-(`/android`, a floating overlay app) — see below for each.
+of one file. There's a desktop build (`/`, Electron), an Android build
+(`/android`, a floating overlay app), and a **browser sandbox** for visually
+iterating on it without reinstalling anything — see below for each.
+
+## Browser sandbox
+
+`index.html` at the repo root is a browser-only harness for looking at and
+tweaking the pet without touching the Electron app: a CSS mock of a Windows
+desktop (wallpaper, taskbar, a couple of icons — just enough context to judge
+scale and placement against) with the pet running on top of it exactly as it
+would on a real screen, plus a small dev panel (top-right) to switch species,
+add/remove crew members, and fire sit/wander/focus/nudge on demand instead of
+waiting for them to happen naturally.
+
+It is **not a second copy of the pet code** — `index.html` loads
+`src/renderer/main.js` completely unmodified, the same file the Electron app
+loads. The only thing standing in for Electron is a small inline script that
+mocks `window.petBridge` (the preload bridge the renderer normally talks to):
+OS-level stuff like click-through and window-focus toggling become no-ops
+(a plain browser tab doesn't need them), `openSpotify`/`openBrowser` become
+`window.open()`, and state persists to `localStorage` instead of a JSON file
+in Electron's userData folder. So a visual fix made here — proportions, a
+pet's colors, animation timing, toy placement — is the exact same fix in the
+real desktop app; there's nothing to keep in sync.
+
+Deployed via the `vercel.json` at the repo root (`npm install` to fetch
+three.js, then the whole repo served as static files — no build step, no
+framework detection to fight).
 
 ## Desktop (Electron)
 
